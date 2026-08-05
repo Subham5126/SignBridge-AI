@@ -1,0 +1,360 @@
+import { useRef, useEffect, useState, useCallback } from 'react'
+import Webcam from 'react-webcam'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Camera, CameraOff, Pause, Play, RotateCcw, Copy, Mic, AlertCircle } from 'lucide-react'
+import { Button, ConfidenceBar, Badge, GlowDot } from '@/components/ui'
+import { useAppStore } from '@/stores/useAppStore'
+import { ISL_SIGNS } from '@/data/islSigns'
+
+// WebSocket logic connects to the real MediaPipe backend
+
+export function SignRecognitionCamera() {
+  const webcamRef = useRef(null)
+  const canvasRef = useRef(null)
+  const animFrameRef = useRef(null)
+  const frameCountRef = useRef(0)
+  const lastSignRef = useRef('')
+
+  const {
+    recognitionActive, recognitionPaused,
+    startRecognition, pauseRecognition, stopRecognition,
+    resetRecognition, addRecognizedSign,
+    recognizedText, confidence, currentSign
+  } = useAppStore()
+
+  const [cameraReady, setCameraReady] = useState(false)
+  const [cameraError, setCameraError] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [fps, setFps] = useState(0)
+  const fpsCounterRef = useRef({ frames: 0, last: Date.now() })
+
+  const wsRef = useRef(null)
+  const serverLandmarksRef = useRef([])
+
+  // Setup WebSocket connection
+  // ── Sign Confirmation Logic ──────────────────────────────────────────
+  // A sign must be held consistently for CONFIRM_MS before being committed.
+  // After committing, a COOLDOWN_MS pause is required before the next sign.
+  // This prevents the text box being flooded with every frame's prediction.
+  const CONFIRM_MS   = 1000   // ms a sign must be held to be accepted
+  const COOLDOWN_MS  = 1200   // ms lockout after a sign is committed
+  const candidateRef    = useRef('')      // sign currently being held
+  const candidateStartRef = useRef(0)    // when holding started
+  const lastCommitTimeRef = useRef(0)    // when last sign was committed
+  const resetTimerRef    = useRef(null)
+
+  useEffect(() => {
+    if (!recognitionActive || recognitionPaused) {
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
+      candidateRef.current = ''
+      candidateStartRef.current = 0
+      return
+    }
+
+    wsRef.current = new WebSocket('ws://localhost:8000/ws/recognize')
+
+    wsRef.current.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+
+        // Update canvas landmarks regardless
+        if (data.landmarks) {
+          serverLandmarksRef.current = data.landmarks
+        }
+
+        const now = Date.now()
+
+        // Still in post-commit cooldown — ignore everything
+        if (now - lastCommitTimeRef.current < COOLDOWN_MS) return
+
+        if (data.sign && data.sign !== 'UNKNOWN' && data.confidence >= 70) {
+          if (data.sign === candidateRef.current) {
+            // Same sign — check if held long enough to commit
+            if (now - candidateStartRef.current >= CONFIRM_MS) {
+              // ✅ COMMIT: sign held long enough!
+              lastSignRef.current = data.sign
+              lastCommitTimeRef.current = now
+              candidateRef.current = ''       // reset so it can re-appear later
+              candidateStartRef.current = 0
+              addRecognizedSign(data.sign, data.confidence)
+            }
+            // else: still holding, not long enough yet — do nothing
+          } else {
+            // New candidate sign — start the hold timer
+            candidateRef.current = data.sign
+            candidateStartRef.current = now
+          }
+        } else {
+          // No clear sign — reset the candidate
+          candidateRef.current = ''
+          candidateStartRef.current = 0
+        }
+      } catch (e) {
+        console.error('WS parse error', e)
+      }
+    }
+
+    return () => {
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
+    }
+  }, [recognitionActive, recognitionPaused, addRecognizedSign])
+
+  // Draw hand skeleton overlay on canvas
+  const drawOverlay = useCallback((ctx, w, h, active) => {
+    ctx.clearRect(0, 0, w, h)
+    if (!active) return
+
+    // Corner brackets
+    const len = 24, thick = 2
+    ctx.strokeStyle = '#a78bfa'
+    ctx.lineWidth = thick
+    const corners = [[0,0],[w,0],[0,h],[w,h]]
+    corners.forEach(([cx,cy]) => {
+      const sx = cx === 0 ? 1 : -1
+      const sy = cy === 0 ? 1 : -1
+      ctx.beginPath()
+      ctx.moveTo(cx + sx*len, cy)
+      ctx.lineTo(cx, cy)
+      ctx.lineTo(cx, cy + sy*len)
+      ctx.stroke()
+    })
+
+    // Draw real landmarks from server
+    if (recognitionActive && !recognitionPaused && serverLandmarksRef.current.length > 0) {
+      const landmarks = serverLandmarksRef.current
+      
+      // Connections for hand skeleton
+      const connections = [
+        [0, 1], [1, 2], [2, 3], [3, 4], // Thumb
+        [0, 5], [5, 6], [6, 7], [7, 8], // Index
+        [5, 9], [9, 10], [10, 11], [11, 12], // Middle
+        [9, 13], [13, 14], [14, 15], [15, 16], // Ring
+        [13, 17], [17, 18], [18, 19], [19, 20], // Pinky
+        [0, 17] // Palm base
+      ]
+
+      ctx.strokeStyle = 'rgba(167,139,250,0.8)'
+      ctx.lineWidth = 2
+
+      connections.forEach(([i, j]) => {
+        if (!landmarks[i] || !landmarks[j]) return
+        ctx.beginPath()
+        ctx.moveTo(landmarks[i].x * w, landmarks[i].y * h)
+        ctx.lineTo(landmarks[j].x * w, landmarks[j].y * h)
+        ctx.stroke()
+      })
+
+      ctx.fillStyle = 'rgba(124,58,237,0.9)'
+      landmarks.forEach(lm => {
+        ctx.beginPath()
+        ctx.arc(lm.x * w, lm.y * h, 3, 0, Math.PI * 2)
+        ctx.fill()
+      })
+    }
+  }, [recognitionActive, recognitionPaused])
+
+  // Main recognition loop
+  useEffect(() => {
+    if (!recognitionActive || recognitionPaused) {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
+      return
+    }
+
+    // Create a single offscreen canvas for resizing frames before sending
+    const offscreenCanvas = document.createElement('canvas')
+    offscreenCanvas.width = 320
+    offscreenCanvas.height = 240
+    const offscreenCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true })
+
+    const loop = () => {
+      frameCountRef.current++
+      const canvas = canvasRef.current
+      const webcam = webcamRef.current
+      
+      if (canvas && webcam?.video && webcam.video.readyState === 4) {
+        // Optimize: Only get the context once, it's not strictly necessary to get it every frame but it's cheap
+        const ctx = canvas.getContext('2d', { alpha: false })
+        
+        // Only set width/height if it changes to avoid heavy canvas resets
+        if (canvas.width !== webcam.video.videoWidth) {
+           canvas.width = webcam.video.videoWidth || 640
+           canvas.height = webcam.video.videoHeight || 480
+        }
+        
+        drawOverlay(ctx, canvas.width, canvas.height, true)
+
+        // Send frame to websocket at ~10 FPS to avoid overloading
+        if (frameCountRef.current % 6 === 0 && wsRef.current?.readyState === WebSocket.OPEN) {
+          // Extremely fast downscaled capture
+          offscreenCtx.drawImage(webcam.video, 0, 0, 320, 240)
+          const frame = offscreenCanvas.toDataURL('image/jpeg', 0.5)
+          wsRef.current.send(frame)
+        }
+      }
+
+      // FPS counter
+      const fpsC = fpsCounterRef.current
+      fpsC.frames++
+      const now = Date.now()
+      if (now - fpsC.last >= 1000) {
+        setFps(fpsC.frames)
+        fpsC.frames = 0
+        fpsC.last = now
+      }
+
+      animFrameRef.current = requestAnimationFrame(loop)
+    }
+
+    animFrameRef.current = requestAnimationFrame(loop)
+    return () => { if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current) }
+  }, [recognitionActive, recognitionPaused, drawOverlay])
+
+  // Idle overlay
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || recognitionActive) return
+    const ctx = canvas.getContext('2d')
+    canvas.width = 640; canvas.height = 480
+    drawOverlay(ctx, 640, 480, false)
+  }, [recognitionActive, drawOverlay])
+
+  const handleCopy = () => {
+    if (recognizedText) {
+      navigator.clipboard.writeText(recognizedText)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Camera container */}
+      <div className="relative rounded-2xl overflow-hidden bg-[var(--color-bg-surface-2)] aspect-video max-h-[480px] border border-[var(--color-border)]">
+        {!cameraError ? (
+          <>
+            <Webcam
+              ref={webcamRef}
+              audio={false}
+              mirrored
+              className="w-full h-full object-cover"
+              onUserMedia={() => setCameraReady(true)}
+              onUserMediaError={() => setCameraError(true)}
+              videoConstraints={{ width: 640, height: 480, facingMode: 'user' }}
+            />
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 w-full h-full scale-x-[-1]"
+              style={{ mixBlendMode: 'normal' }}
+            />
+          </>
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+            <CameraOff size={40} className="text-[var(--color-text-muted)]" />
+            <p className="text-sm text-[var(--color-text-muted)]">Camera access denied</p>
+            <p className="text-xs text-[var(--color-text-muted)]">Please allow camera permissions</p>
+          </div>
+        )}
+
+        {/* Status overlay */}
+        <div className="absolute top-3 left-3 flex items-center gap-2">
+          <GlowDot active={recognitionActive && !recognitionPaused} color="#10b981" />
+          <span className="text-xs font-medium text-white bg-black/50 px-2 py-0.5 rounded-full backdrop-blur-sm">
+            {recognitionActive && !recognitionPaused ? 'LIVE' : recognitionPaused ? 'PAUSED' : 'READY'}
+          </span>
+        </div>
+
+        {/* FPS indicator */}
+        {recognitionActive && (
+          <div className="absolute top-3 right-3 text-xs font-mono text-[var(--color-primary-400)] bg-black/50 px-2 py-0.5 rounded-full backdrop-blur-sm">
+            {fps} FPS
+          </div>
+        )}
+
+        {/* Current sign display */}
+        <AnimatePresence>
+          {currentSign && recognitionActive && (
+            <motion.div
+              key={currentSign}
+              initial={{ opacity: 0, y: 20, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-md px-6 py-2 rounded-full border border-[var(--color-primary-500)]/40"
+            >
+              <span className="text-xl font-bold gradient-text">{currentSign}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Idle message */}
+        {!recognitionActive && cameraReady && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center">
+              <Camera size={32} className="mx-auto mb-2 text-[var(--color-primary-400)]" />
+              <p className="text-sm text-[var(--color-text-muted)]">Press Start to begin recognition</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Controls */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {!recognitionActive ? (
+          <Button variant="primary" size="md" icon={<Camera size={16} />} onClick={startRecognition} disabled={cameraError}>
+            Start Recognition
+          </Button>
+        ) : (
+          <Button
+            variant={recognitionPaused ? 'accent' : 'secondary'}
+            size="md"
+            icon={recognitionPaused ? <Play size={16} /> : <Pause size={16} />}
+            onClick={pauseRecognition}
+          >
+            {recognitionPaused ? 'Resume' : 'Pause'}
+          </Button>
+        )}
+
+        {recognitionActive && (
+          <Button variant="secondary" size="md" icon={<CameraOff size={16} />} onClick={stopRecognition}>
+            Stop
+          </Button>
+        )}
+
+        <Button variant="ghost" size="md" icon={<RotateCcw size={16} />} onClick={resetRecognition}>
+          Reset
+        </Button>
+
+        <Button
+          variant="ghost" size="md"
+          icon={<Copy size={16} />}
+          onClick={handleCopy}
+          disabled={!recognizedText}
+        >
+          {copied ? 'Copied!' : 'Copy Text'}
+        </Button>
+      </div>
+
+      {/* Confidence */}
+      {recognitionActive && <ConfidenceBar value={confidence} />}
+
+      {/* Recognized text area */}
+      <div className="card p-4 min-h-[100px] relative">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-medium text-[var(--color-text-muted)] uppercase tracking-wider">Recognized Text</span>
+          <Badge variant="accent">ASL Alphabet → Text</Badge>
+        </div>
+        {recognizedText ? (
+          <p className="text-lg font-medium text-[var(--color-text-primary)] leading-relaxed">
+            {recognizedText}
+            {recognitionActive && !recognitionPaused && <span className="typing-cursor" />}
+          </p>
+        ) : (
+          <p className="text-[var(--color-text-muted)] text-sm">
+            Start the camera and perform signs — recognized text will appear here.
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}

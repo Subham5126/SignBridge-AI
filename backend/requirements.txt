@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+websockets
+python-dotenv
+sqlalchemy
+supabase
+pydantic
+pydantic-settings
+openai
+# Note: In a real environment, uncomment the ML dependencies below
+mediapipe==0.10.14
+opencv-python-headless
+numpy
+torch
+pandas
+# openai-whisper

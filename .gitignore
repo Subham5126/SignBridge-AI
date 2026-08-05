@@ -1,0 +1,43 @@
+# ─── Frontend ────────────────────────────────
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# ─── Backend ─────────────────────────────────
+backend/venv/
+backend/__pycache__/
+backend/app/**/__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Environment variables (contains API keys!)
+backend/.env
+.env
+
+# ─── ML / Data (too large for GitHub) ────────
+backend/data/dataset/
+backend/data/isl_landmarks.csv
+backend/models/sign_model.pt
+backend/models/class_mapping.json
+backend/hand_landmarker.task
+
+# ─── Editor / OS ─────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+Thumbs.db
