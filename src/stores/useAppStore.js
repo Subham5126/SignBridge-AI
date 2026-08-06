@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { saveTranslationSession } from '@/lib/supabase'
 
 export const useAppStore = create(
   persist(
@@ -30,14 +31,15 @@ export const useAppStore = create(
       conversations: [],
 
       // Learning
+      activePracticeSeconds: 0,
       learningProgress: {
-        streak: 7,
-        totalSigns: 42,
-        accuracy: 78,
-        practiceMinutes: 234,
-        favoriteSigns: ['Hello', 'Thank You', 'Please', 'Yes', 'No'],
-        weakSigns: ['Numbers', 'Emotions'],
-        weeklyData: [65, 72, 58, 80, 75, 88, 78],
+        streak: 1,
+        totalSigns: 0,
+        accuracy: 85,
+        practiceMinutes: 0,
+        favoriteSigns: ['Hello', 'Thank You', 'Please'],
+        weakSigns: ['Numbers'],
+        weeklyData: [0, 0, 0, 0, 0, 0, 0],
       },
 
       // Saved phrases
@@ -65,19 +67,112 @@ export const useAppStore = create(
         ],
       },
 
+      // User History & Profiles Store
+      userHistoryStore: {},
+      registeredUsers: {},
+
       // Actions
       setTheme: (theme) => set({ theme }),
       toggleHighContrast: () => set((s) => ({ highContrast: !s.highContrast })),
       toggleLargeText: () => set((s) => ({ largeText: !s.largeText })),
       setLanguage: (language) => set({ language }),
 
-      setUser: (user) => set({ user, isAuthenticated: !!user }),
-      logout: () => set({ user: null, isAuthenticated: false }),
+      setUser: (newUser) => set((s) => {
+        const storeMap = { ...s.userHistoryStore }
+
+        // Save active user data before switching
+        if (s.user?.id || s.user?.email) {
+          const activeKey = (s.user.id || s.user.email).toLowerCase()
+          storeMap[activeKey] = {
+            recognitionHistory: s.recognitionHistory || [],
+            activePracticeSeconds: s.activePracticeSeconds || 0,
+            conversations: s.conversations || [],
+            recognizedText: s.recognizedText || ''
+          }
+        }
+
+        // Check if user already exists in registeredUsers profile store
+        let profileToUse = newUser
+        if (newUser?.email) {
+          const emailKey = newUser.email.toLowerCase()
+          if (s.registeredUsers[emailKey]) {
+            profileToUse = {
+              ...s.registeredUsers[emailKey],
+              ...newUser,
+              user_metadata: {
+                ...(s.registeredUsers[emailKey]?.user_metadata || {}),
+                ...(newUser?.user_metadata || {})
+              }
+            }
+          }
+        }
+
+        // Persist profile into registeredUsers
+        const updatedRegistered = profileToUse?.email ? {
+          ...s.registeredUsers,
+          [profileToUse.email.toLowerCase()]: profileToUse
+        } : s.registeredUsers
+
+        // Restore target user history data
+        let targetHistory = []
+        let targetSeconds = 0
+        let targetConversations = []
+        let targetText = ''
+
+        if (profileToUse?.id || profileToUse?.email) {
+          const targetKey = (profileToUse.id || profileToUse.email).toLowerCase()
+          if (storeMap[targetKey]) {
+            targetHistory = storeMap[targetKey].recognitionHistory || []
+            targetSeconds = storeMap[targetKey].activePracticeSeconds || 0
+            targetConversations = storeMap[targetKey].conversations || []
+            targetText = storeMap[targetKey].recognizedText || ''
+          }
+        }
+
+        return {
+          user: profileToUse,
+          isAuthenticated: !!profileToUse,
+          registeredUsers: updatedRegistered,
+          userHistoryStore: storeMap,
+          recognitionHistory: targetHistory,
+          activePracticeSeconds: targetSeconds,
+          conversations: targetConversations,
+          recognizedText: targetText,
+          currentSign: null
+        }
+      }),
+
+      logout: () => set((s) => {
+        const storeMap = { ...s.userHistoryStore }
+
+        // Save active user data before logging out
+        if (s.user?.id || s.user?.email) {
+          const activeKey = (s.user.id || s.user.email).toLowerCase()
+          storeMap[activeKey] = {
+            recognitionHistory: s.recognitionHistory || [],
+            activePracticeSeconds: s.activePracticeSeconds || 0,
+            conversations: s.conversations || [],
+            recognizedText: s.recognizedText || ''
+          }
+        }
+
+        return {
+          user: null,
+          isAuthenticated: false,
+          userHistoryStore: storeMap,
+          recognitionHistory: [],
+          activePracticeSeconds: 0,
+          recognizedText: '',
+          currentSign: null,
+          conversations: []
+        }
+      }),
 
       startRecognition: () => set({ recognitionActive: true, recognitionPaused: false }),
       pauseRecognition: () => set((s) => ({ recognitionPaused: !s.recognitionPaused })),
       stopRecognition: () => set({ recognitionActive: false, recognitionPaused: false, currentSign: null }),
       resetRecognition: () => set({ recognizedText: '', recognitionHistory: [], confidence: 0, currentSign: null }),
+      setRecognizedText: (text) => set({ recognizedText: text }),
 
       addRecognizedSign: (sign, confidence) => set((s) => {
         let newText = s.recognizedText
@@ -97,6 +192,10 @@ export const useAppStore = create(
           newText = newText + sign
         }
 
+        if (s.user?.id || s.user?.email) {
+          saveTranslationSession(s.user.id || s.user.email, sign, newText, confidence)
+        }
+
         return {
           currentSign: sign,
           confidence,
@@ -108,6 +207,7 @@ export const useAppStore = create(
         }
       }),
 
+      incrementPracticeSeconds: (sec = 1) => set((s) => ({ activePracticeSeconds: (s.activePracticeSeconds || 0) + sec })),
       addConversation: (msg) => set((s) => ({
         conversations: [...s.conversations, { ...msg, id: Date.now() }],
       })),
@@ -132,6 +232,9 @@ export const useAppStore = create(
         savedPhrases: state.savedPhrases,
         learningProgress: state.learningProgress,
         recognitionHistory: state.recognitionHistory,
+        activePracticeSeconds: state.activePracticeSeconds,
+        userHistoryStore: state.userHistoryStore,
+        registeredUsers: state.registeredUsers,
       }),
     }
   )

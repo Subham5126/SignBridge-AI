@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation, Outlet } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { LandingPage } from '@/pages/LandingPage'
@@ -11,6 +12,8 @@ import { ConversationPage } from '@/pages/ConversationPage'
 import { LearnPage } from '@/pages/LearnPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { useAppStore } from '@/stores/useAppStore'
+import { restoreAuthSession, onAuthStateChange } from '@/lib/supabase'
+import { isProfileComplete, getPostLoginPath } from '@/lib/profileUtils'
 
 const pageVariants = {
   initial: { opacity: 0, y: 12 },
@@ -39,13 +42,56 @@ function AnimatedPage({ children }) {
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAppStore()
-  // For demo purposes: allow access without auth
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />
+  }
   return children
+}
+
+function ProfileGate() {
+  const { user } = useAppStore()
+  const location = useLocation()
+
+  if (user && !isProfileComplete(user) && location.pathname !== '/app/profile') {
+    return <Navigate to="/app/profile" replace />
+  }
+
+  return <Outlet />
+}
+
+function AuthBootstrap() {
+  const { setUser } = useAppStore()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    restoreAuthSession().then(({ user }) => {
+      if (user) {
+        setUser(user)
+        if (window.location.pathname === '/login') {
+          navigate(getPostLoginPath(user), { replace: true })
+        }
+      }
+    })
+
+    const unsubscribe = onAuthStateChange((user) => {
+      if (user) {
+        setUser(user)
+        if (window.location.pathname === '/login') {
+          navigate(getPostLoginPath(user), { replace: true })
+        }
+      }
+    })
+
+    return unsubscribe
+  }, [setUser, navigate])
+
+  return null
 }
 
 export default function App() {
   return (
     <BrowserRouter>
+      <AuthBootstrap />
       <Routes>
         {/* Public routes */}
         <Route path="/" element={<LandingPage />} />
@@ -57,13 +103,15 @@ export default function App() {
             <AppLayout />
           </ProtectedRoute>
         }>
-          <Route index element={<AnimatedPage><DashboardPage /></AnimatedPage>} />
-          <Route path="recognize" element={<AnimatedPage><RecognizePage /></AnimatedPage>} />
-          <Route path="text-to-sign" element={<AnimatedPage><TextToSignPage /></AnimatedPage>} />
-          <Route path="speech" element={<AnimatedPage><SpeechPage /></AnimatedPage>} />
-          <Route path="conversation" element={<AnimatedPage><ConversationPage /></AnimatedPage>} />
-          <Route path="learn" element={<AnimatedPage><LearnPage /></AnimatedPage>} />
-          <Route path="profile" element={<AnimatedPage><ProfilePage /></AnimatedPage>} />
+          <Route element={<ProfileGate />}>
+            <Route index element={<AnimatedPage><DashboardPage /></AnimatedPage>} />
+            <Route path="recognize" element={<AnimatedPage><RecognizePage /></AnimatedPage>} />
+            <Route path="text-to-sign" element={<AnimatedPage><TextToSignPage /></AnimatedPage>} />
+            <Route path="speech" element={<AnimatedPage><SpeechPage /></AnimatedPage>} />
+            <Route path="conversation" element={<AnimatedPage><ConversationPage /></AnimatedPage>} />
+            <Route path="learn" element={<AnimatedPage><LearnPage /></AnimatedPage>} />
+            <Route path="profile" element={<AnimatedPage><ProfilePage /></AnimatedPage>} />
+          </Route>
         </Route>
 
         {/* Fallback */}

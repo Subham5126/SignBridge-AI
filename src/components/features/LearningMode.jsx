@@ -53,105 +53,159 @@ function SignCard({ sign, onPractice, isFavorite, onFavoriteToggle }) {
   )
 }
 
+import Webcam from 'react-webcam'
+
 function PracticeModal({ sign, onClose }) {
   const [score, setScore] = useState(null)
-  const [countdown, setCountdown] = useState(3)
-  const [capturing, setCapturing] = useState(false)
+  const [detectedSign, setDetectedSign] = useState('')
+  const [liveConfidence, setLiveConfidence] = useState(0)
+  const [webcamActive, setWebcamActive] = useState(false)
   const webcamRef = useRef(null)
+  const wsRef = useRef(null)
+  const animFrameRef = useRef(null)
 
+  const targetSign = sign.word.toUpperCase()
+
+  // Setup WebSocket AI recognition inside practice modal
   useEffect(() => {
-    if (!capturing) return
-    const timer = setInterval(() => {
-      setCountdown(c => {
-        if (c <= 1) {
-          clearInterval(timer)
-          setCapturing(false)
-          const s = 65 + Math.floor(Math.random() * 33)
-          setScore(s)
-          return 0
-        }
-        return c - 1
-      })
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [capturing])
+    if (!webcamActive) return
 
-  const startCapture = () => { setScore(null); setCountdown(3); setCapturing(true) }
+    const ws = new WebSocket('ws://localhost:8000/ws/recognize')
+    wsRef.current = ws
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        if (data.sign && data.sign !== 'UNKNOWN') {
+          setDetectedSign(data.sign.toUpperCase())
+          setLiveConfidence(data.confidence || 0)
+
+          // Check match with target sign
+          if (data.sign.toUpperCase() === targetSign && data.confidence >= 65) {
+            setScore(data.confidence)
+          }
+        }
+      } catch (e) {
+        console.error(e)
+      }
+    }
+
+    // Capture loop
+    const offscreen = document.createElement('canvas')
+    offscreen.width = 320; offscreen.height = 240
+    const offCtx = offscreen.getContext('2d', { willReadFrequently: true })
+    let count = 0
+
+    const sendLoop = () => {
+      count++
+      const webcam = webcamRef.current
+      if (webcam?.video && webcam.video.readyState === 4) {
+        if (count % 6 === 0 && wsRef.current?.readyState === WebSocket.OPEN) {
+          offCtx.drawImage(webcam.video, 0, 0, 320, 240)
+          const frame = offscreen.toDataURL('image/jpeg', 0.5)
+          wsRef.current.send(frame)
+        }
+      }
+      animFrameRef.current = requestAnimationFrame(sendLoop)
+    }
+
+    animFrameRef.current = requestAnimationFrame(sendLoop)
+
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+    }
+  }, [webcamActive, targetSign])
 
   const scoreColor = score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444'
   const scoreFeedback = score >= 80
-    ? "Excellent! Your hand position is accurate."
+    ? "🎉 Perfect match! Your hand posture and sign are accurate."
     : score >= 60
-      ? "Good effort! Try to keep your fingers more extended."
-      : "Keep practicing. Focus on the hand orientation."
+      ? "Good effort! Keep holding the hand shape clearly."
+      : "Keep practicing. Make sure your hand is well lit in front of the camera."
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4"
       onClick={onClose}
     >
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
-        className="card p-6 max-w-md w-full"
+        className="card p-6 max-w-md w-full border border-[var(--color-primary-500)]/30"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-5">
-          <h3 className="font-bold text-lg text-[var(--color-text-primary)]">Practice: {sign.word}</h3>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <span className="text-xs text-[var(--color-primary-400)] font-semibold uppercase tracking-wider">AI Practice Mode</span>
+            <h3 className="font-bold text-lg text-[var(--color-text-primary)]">Target: {sign.word}</h3>
+          </div>
           <button onClick={onClose} className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]">
             <XCircle size={20} />
           </button>
         </div>
 
-        {/* Instructions */}
+        {/* Description & Target */}
         <div className="p-3 rounded-xl bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] mb-4">
-          <p className="text-sm text-[var(--color-text-secondary)]">{sign.description}</p>
+          <p className="text-xs text-[var(--color-text-secondary)]">{sign.description}</p>
         </div>
 
-        {/* Camera area */}
+        {/* Live Webcam & Evaluation Area */}
         <div className="aspect-video rounded-xl bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] mb-4 flex items-center justify-center relative overflow-hidden">
-          {capturing ? (
-            <div className="text-center">
-              <motion.div
-                animate={{ scale: [1, 1.3, 1] }}
-                transition={{ duration: 1, repeat: Infinity }}
-                className="text-5xl font-black gradient-text mb-2"
-              >
-                {countdown}
-              </motion.div>
-              <p className="text-xs text-[var(--color-text-muted)]">Hold the sign steady...</p>
-            </div>
+          {webcamActive ? (
+            <>
+              <Webcam
+                ref={webcamRef}
+                audio={false}
+                mirrored
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute top-2 left-2 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-sm text-xs text-white font-mono flex items-center gap-1.5 border border-white/10">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>LIVE AI EVALUATION</span>
+              </div>
+
+              {detectedSign && (
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-black/80 backdrop-blur-md border border-[var(--color-primary-500)]/50 text-center">
+                  <span className="text-xs text-[var(--color-text-muted)] block">Detected:</span>
+                  <span className="text-sm font-bold text-[var(--color-primary-400)]">{detectedSign} ({liveConfidence}%)</span>
+                </div>
+              )}
+            </>
           ) : score !== null ? (
             <div className="text-center p-4">
               <ProgressRing value={score} size={100} color={scoreColor} label="Score" />
-              <p className="text-sm text-[var(--color-text-secondary)] mt-3">{scoreFeedback}</p>
+              <p className="text-sm text-[var(--color-text-secondary)] mt-3 font-medium">{scoreFeedback}</p>
             </div>
           ) : (
             <div className="text-center">
-              <Camera size={28} className="mx-auto mb-2 text-[var(--color-text-muted)]" />
-              <p className="text-xs text-[var(--color-text-muted)]">Position your hand and click Capture</p>
+              <Camera size={32} className="mx-auto mb-2 text-[var(--color-primary-400)]" />
+              <p className="text-xs text-[var(--color-text-muted)]">Click "Start Live Practice" to test your sign</p>
             </div>
           )}
         </div>
 
         <div className="flex gap-2">
-          {score !== null && (
-            <Button variant="ghost" size="sm" icon={<RotateCcw size={14} />} onClick={startCapture}>
-              Try Again
+          {!webcamActive ? (
+            <Button
+              variant="primary" size="sm" className="flex-1"
+              icon={<Camera size={14} />}
+              onClick={() => { setScore(null); setWebcamActive(true) }}
+            >
+              Start Live Practice
+            </Button>
+          ) : (
+            <Button
+              variant="secondary" size="sm" className="flex-1"
+              onClick={() => setWebcamActive(false)}
+            >
+              Stop & View Result
             </Button>
           )}
-          <Button
-            variant="primary" size="sm" className="flex-1"
-            icon={<Camera size={14} />}
-            onClick={startCapture}
-            disabled={capturing}
-          >
-            {capturing ? `Capturing in ${countdown}...` : 'Capture & Score'}
-          </Button>
         </div>
       </motion.div>
     </motion.div>

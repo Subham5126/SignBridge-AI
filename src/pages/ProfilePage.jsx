@@ -1,28 +1,57 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
-  User, Settings, Bell, Shield, Globe, Accessibility,
-  Moon, Sun, Type, Contrast, Hand, Save, Camera, Award,
-  Activity, Flame, BookOpen, TrendingUp
+  User, Accessibility, Moon, Type, Contrast, Save, LogOut, Check,
+  Hand, Target, MapPin, GraduationCap, Flame, Activity, Award, TrendingUp
 } from 'lucide-react'
-import { Button, Badge, Card, ProgressRing, StatCard } from '@/components/ui'
+import { Button, Badge, Card, StatCard } from '@/components/ui'
 import { useAppStore } from '@/stores/useAppStore'
+import { signOutUser, saveUserProfile } from '@/lib/supabase'
+import { ProfileOnboarding } from '@/components/profile/ProfileOnboarding'
+import {
+  isProfileComplete, getProfileDefaults,
+  USER_ROLES, SIGN_LANGUAGES, EXPERIENCE_LEVELS, PRIMARY_GOALS
+} from '@/lib/profileUtils'
+
+function labelFor(options, id) {
+  return options.find(o => o.id === id)?.label || id || '—'
+}
 
 export function ProfilePage() {
   const {
-    user, isAuthenticated,
-    highContrast, largeText, language,
-    toggleHighContrast, toggleLargeText, setLanguage,
-    learningProgress
+    user, setUser, logout,
+    highContrast, largeText,
+    toggleHighContrast, toggleLargeText,
+    learningProgress,
   } = useAppStore()
 
-  const [name, setName] = useState('Alex Kumar')
-  const [email, setEmail] = useState('alex@example.com')
+  const [form, setForm] = useState(getProfileDefaults(user))
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
 
-  const handleSave = () => {
+  useEffect(() => {
+    if (user) setForm(getProfileDefaults(user))
+  }, [user])
+
+  if (!isProfileComplete(user)) {
+    return <ProfileOnboarding />
+  }
+
+  const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }))
+
+  const handleSave = async () => {
+    setSaving(true)
+    const profileData = { ...form, name: form.name.trim(), profile_complete: true }
+    await saveUserProfile(profileData)
+    setUser({ ...user, user_metadata: { ...user.user_metadata, ...profileData } })
+    setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  const handleLogout = async () => {
+    await signOutUser()
+    logout()
   }
 
   const ToggleRow = ({ icon: Icon, label, desc, enabled, onToggle }) => (
@@ -47,89 +76,182 @@ export function ProfilePage() {
     </div>
   )
 
+  const avatarUrl = user?.user_metadata?.avatar_url
+  const roleLabel = labelFor(USER_ROLES, form.role)
+  const langLabel = labelFor(SIGN_LANGUAGES, form.sign_language)
+  const levelLabel = labelFor(EXPERIENCE_LEVELS, form.experience_level)
+  const goalLabel = labelFor(PRIMARY_GOALS, form.primary_goal)
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Profile header */}
+      {/* Header card */}
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        className="card p-6"
+        className="card p-6 border border-[var(--color-primary-500)]/30"
       >
-        <div className="flex items-start gap-5">
-          <div className="relative">
+        <div className="flex items-start gap-5 flex-wrap">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="" className="w-20 h-20 rounded-2xl object-cover border-2 border-[var(--color-primary-500)]/40 shadow-lg" />
+          ) : (
             <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[var(--color-primary-600)] to-[var(--color-accent-500)] flex items-center justify-center text-3xl font-black text-white shadow-[0_0_30px_rgba(124,58,237,0.3)]">
-              {name[0]}
+              {form.name[0]?.toUpperCase() || 'U'}
             </div>
-            <button className="absolute -bottom-1 -right-1 p-1 rounded-full bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]">
-              <Camera size={12} />
-            </button>
+          )}
+
+          <div className="flex-1 min-w-[200px]">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <h2 className="text-xl font-bold text-[var(--color-text-primary)]">{form.name}</h2>
+              <Badge variant="success">Profile complete</Badge>
+              {user?.user_metadata?.provider === 'google' && (
+                <Badge variant="primary">Google</Badge>
+              )}
+            </div>
+            <p className="text-sm text-[var(--color-text-muted)]">{user?.email}</p>
+            {form.bio && (
+              <p className="text-xs text-[var(--color-text-secondary)] mt-1.5 italic">{form.bio}</p>
+            )}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-xs">
+              <span className="flex items-center gap-1 text-amber-400 font-semibold">
+                <Flame size={13} /> {learningProgress.streak} day streak
+              </span>
+              {form.location && (
+                <span className="flex items-center gap-1 text-[var(--color-text-muted)]">
+                  <MapPin size={12} /> {form.location}
+                </span>
+              )}
+            </div>
           </div>
 
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <h2 className="text-xl font-bold text-[var(--color-text-primary)]">{name}</h2>
-              <Badge variant="primary">Pro</Badge>
+          <Button variant="ghost" size="sm" icon={<LogOut size={14} />} onClick={handleLogout}>
+            Sign out
+          </Button>
+        </div>
+
+        {/* Quick summary chips */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-5 pt-5 border-t border-[var(--color-border)]">
+          {[
+            { icon: User, label: 'Role', value: roleLabel },
+            { icon: Hand, label: 'Language', value: langLabel },
+            { icon: GraduationCap, label: 'Level', value: levelLabel },
+            { icon: Target, label: 'Goal', value: goalLabel },
+          ].map(({ icon: Icon, label, value }) => (
+            <div key={label} className="p-3 rounded-xl bg-[var(--color-bg-surface-2)] border border-[var(--color-border)]">
+              <div className="flex items-center gap-1.5 text-[var(--color-text-muted)] mb-1">
+                <Icon size={12} />
+                <span className="text-[10px] uppercase tracking-wide font-medium">{label}</span>
+              </div>
+              <p className="text-xs font-semibold text-[var(--color-text-primary)] leading-snug">{value}</p>
             </div>
-            <p className="text-sm text-[var(--color-text-muted)]">{email}</p>
-            <div className="flex items-center gap-3 mt-2">
-              <span className="flex items-center gap-1 text-xs text-amber-400">
-                <Flame size={12} /> {learningProgress.streak} day streak
-              </span>
-              <span className="text-xs text-[var(--color-text-muted)]">·</span>
-              <span className="flex items-center gap-1 text-xs text-[var(--color-text-muted)]">
-                <Award size={12} /> Level 4
-              </span>
-            </div>
-          </div>
+          ))}
         </div>
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Account settings */}
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.05 } }}>
+        {/* Edit profile */}
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
           <Card className="p-5">
             <h3 className="font-semibold text-sm text-[var(--color-text-secondary)] mb-4 flex items-center gap-2">
-              <User size={15} className="text-[var(--color-primary-400)]" /> Account
+              <User size={15} className="text-[var(--color-primary-400)]" /> Personal details
             </h3>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-[var(--color-text-muted)] mb-1">Display Name</label>
+                <label className="block text-xs text-[var(--color-text-muted)] mb-1">Display name</label>
                 <input
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  className="w-full bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary-500)]/50"
-                  aria-label="Display name"
+                  value={form.name}
+                  onChange={e => update('name', e.target.value)}
+                  className="w-full bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary-500)]"
                 />
               </div>
               <div>
-                <label className="block text-xs text-[var(--color-text-muted)] mb-1">Email Address</label>
+                <label className="block text-xs text-[var(--color-text-muted)] mb-1">Email</label>
                 <input
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  type="email"
-                  className="w-full bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary-500)]/50"
-                  aria-label="Email address"
+                  value={user?.email || ''}
+                  disabled
+                  className="w-full bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-text-muted)] opacity-70 cursor-not-allowed"
                 />
               </div>
               <div>
-                <label className="block text-xs text-[var(--color-text-muted)] mb-1">Interface Language</label>
+                <label className="block text-xs text-[var(--color-text-muted)] mb-1">Location</label>
+                <input
+                  value={form.location}
+                  onChange={e => update('location', e.target.value)}
+                  placeholder="City, Country"
+                  className="w-full bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary-500)]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-[var(--color-text-muted)] mb-1">Bio</label>
+                <textarea
+                  value={form.bio}
+                  onChange={e => update('bio', e.target.value)}
+                  rows={2}
+                  className="w-full bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary-500)] resize-none"
+                />
+              </div>
+            </div>
+          </Card>
+        </motion.div>
+
+        {/* Sign language preferences */}
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.05 } }}>
+          <Card className="p-5">
+            <h3 className="font-semibold text-sm text-[var(--color-text-secondary)] mb-4 flex items-center gap-2">
+              <Hand size={15} className="text-[var(--color-primary-400)]" /> Sign language preferences
+            </h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-[var(--color-text-muted)] mb-1">Your role</label>
                 <select
-                  value={language}
-                  onChange={e => setLanguage(e.target.value)}
-                  className="w-full bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none cursor-pointer"
-                  aria-label="Language"
+                  value={form.role}
+                  onChange={e => update('role', e.target.value)}
+                  className="w-full bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary-500)]"
                 >
-                  <option value="en">English</option>
-                  <option value="hi">हिन्दी (Hindi)</option>
-                  <option value="mr">मराठी (Marathi)</option>
+                  <option value="">Select role</option>
+                  {USER_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
                 </select>
               </div>
+              <div>
+                <label className="block text-xs text-[var(--color-text-muted)] mb-1">Primary sign language</label>
+                <select
+                  value={form.sign_language}
+                  onChange={e => update('sign_language', e.target.value)}
+                  className="w-full bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary-500)]"
+                >
+                  <option value="">Select language</option>
+                  {SIGN_LANGUAGES.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-[var(--color-text-muted)] mb-1">Experience level</label>
+                <select
+                  value={form.experience_level}
+                  onChange={e => update('experience_level', e.target.value)}
+                  className="w-full bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary-500)]"
+                >
+                  <option value="">Select level</option>
+                  {EXPERIENCE_LEVELS.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-[var(--color-text-muted)] mb-1">Primary goal</label>
+                <select
+                  value={form.primary_goal}
+                  onChange={e => update('primary_goal', e.target.value)}
+                  className="w-full bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary-500)]"
+                >
+                  <option value="">Select goal</option>
+                  {PRIMARY_GOALS.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
+                </select>
+              </div>
+
               <Button
-                variant="primary" size="sm" className="w-full mt-2"
-                icon={<Save size={14} />}
+                variant="primary" size="sm" className="w-full mt-1"
+                icon={saved ? <Check size={14} /> : <Save size={14} />}
                 onClick={handleSave}
+                loading={saving}
               >
-                {saved ? '✓ Saved!' : 'Save Changes'}
+                {saved ? 'Changes saved' : 'Save changes'}
               </Button>
             </div>
           </Card>
@@ -142,75 +264,28 @@ export function ProfilePage() {
               <Accessibility size={15} className="text-[var(--color-accent-400)]" /> Accessibility
             </h3>
             <div className="space-y-1">
-              <ToggleRow
-                icon={Contrast}
-                label="High Contrast"
-                desc="Enhances visibility for low vision"
-                enabled={highContrast}
-                onToggle={toggleHighContrast}
-              />
-              <ToggleRow
-                icon={Type}
-                label="Large Text"
-                desc="Increases text size by 12%"
-                enabled={largeText}
-                onToggle={toggleLargeText}
-              />
-              <ToggleRow
-                icon={Moon}
-                label="Dark Mode"
-                desc="Always on for optimal visibility"
-                enabled={true}
-                onToggle={() => {}}
-              />
-              <ToggleRow
-                icon={Bell}
-                label="Notifications"
-                desc="Practice reminders and updates"
-                enabled={true}
-                onToggle={() => {}}
-              />
+              <ToggleRow icon={Contrast} label="High contrast" desc="Enhances visibility for low vision" enabled={highContrast} onToggle={toggleHighContrast} />
+              <ToggleRow icon={Type} label="Large text" desc="Increases text size by 12%" enabled={largeText} onToggle={toggleLargeText} />
+              <ToggleRow icon={Moon} label="Dark mode" desc="Always on for optimal visibility" enabled={true} onToggle={() => {}} />
+            </div>
+          </Card>
+        </motion.div>
+
+        {/* Learning stats */}
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.15 } }}>
+          <Card className="p-5">
+            <h3 className="font-semibold text-sm text-[var(--color-text-secondary)] mb-4 flex items-center gap-2">
+              <Activity size={15} className="text-green-400" /> Your progress
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <StatCard title="Streak" value={`${learningProgress.streak}d`} icon={<Flame size={16} />} color="#f59e0b" />
+              <StatCard title="Signs learned" value={learningProgress.totalSigns} icon={<Hand size={16} />} color="#7c3aed" />
+              <StatCard title="Accuracy" value={`${learningProgress.accuracy}%`} icon={<Award size={16} />} color="#10b981" />
+              <StatCard title="Practice time" value={`${learningProgress.practiceMinutes}m`} icon={<TrendingUp size={16} />} color="#06b6d4" />
             </div>
           </Card>
         </motion.div>
       </div>
-
-      {/* Learning Stats */}
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.15 } }}>
-        <Card className="p-5">
-          <h3 className="font-semibold text-sm text-[var(--color-text-secondary)] mb-4 flex items-center gap-2">
-            <Activity size={15} className="text-green-400" /> Learning Statistics
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <StatCard title="Streak" value={`${learningProgress.streak}d`} icon={<Flame size={16} />} color="#f59e0b" />
-            <StatCard title="Total Signs" value={learningProgress.totalSigns} icon={<Hand size={16} />} color="#7c3aed" />
-            <StatCard title="Accuracy" value={`${learningProgress.accuracy}%`} icon={<Award size={16} />} color="#10b981" />
-            <StatCard title="Minutes" value={learningProgress.practiceMinutes} icon={<TrendingUp size={16} />} color="#06b6d4" />
-          </div>
-
-          <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
-            <p className="text-xs text-[var(--color-text-muted)] mb-2">Favorite Signs</p>
-            <div className="flex flex-wrap gap-1.5">
-              {learningProgress.favoriteSigns.map(sign => (
-                <span key={sign} className="px-2.5 py-1 rounded-full text-xs bg-[var(--color-primary-600)]/15 text-[var(--color-primary-400)] border border-[var(--color-primary-500)]/20">
-                  {sign}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-3">
-            <p className="text-xs text-[var(--color-text-muted)] mb-2">Needs Practice</p>
-            <div className="flex flex-wrap gap-1.5">
-              {learningProgress.weakSigns.map(sign => (
-                <span key={sign} className="px-2.5 py-1 rounded-full text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                  {sign}
-                </span>
-              ))}
-            </div>
-          </div>
-        </Card>
-      </motion.div>
     </div>
   )
 }

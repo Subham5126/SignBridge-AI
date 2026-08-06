@@ -1,10 +1,11 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import Webcam from 'react-webcam'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Camera, CameraOff, Pause, Play, RotateCcw, Copy, Mic, AlertCircle } from 'lucide-react'
+import { Camera, CameraOff, Pause, Play, RotateCcw, Copy, Mic, AlertCircle, Volume2, Sparkles, CornerDownLeft, Delete } from 'lucide-react'
 import { Button, ConfidenceBar, Badge, GlowDot } from '@/components/ui'
 import { useAppStore } from '@/stores/useAppStore'
 import { ISL_SIGNS } from '@/data/islSigns'
+import { getWordSuggestions } from '@/data/commonWords'
 
 // WebSocket logic connects to the real MediaPipe backend
 
@@ -18,15 +19,37 @@ export function SignRecognitionCamera() {
   const {
     recognitionActive, recognitionPaused,
     startRecognition, pauseRecognition, stopRecognition,
-    resetRecognition, addRecognizedSign,
-    recognizedText, confidence, currentSign
+    resetRecognition, addRecognizedSign, setRecognizedText,
+    recognizedText, confidence, currentSign, incrementPracticeSeconds
   } = useAppStore()
+
+  // Track active practice seconds in real time
+  useEffect(() => {
+    if (!recognitionActive || recognitionPaused) return
+    const timer = setInterval(() => {
+      incrementPracticeSeconds(1)
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [recognitionActive, recognitionPaused, incrementPracticeSeconds])
 
   const [cameraReady, setCameraReady] = useState(false)
   const [cameraError, setCameraError] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [speaking, setSpeaking] = useState(false)
   const [fps, setFps] = useState(0)
   const fpsCounterRef = useRef({ frames: 0, last: Date.now() })
+
+  const suggestions = getWordSuggestions(recognizedText)
+
+  const handleSpeak = () => {
+    if (!recognizedText || !('speechSynthesis' in window)) return
+    window.speechSynthesis.cancel()
+    const utterance = new SpeechSynthesisUtterance(recognizedText)
+    utterance.onstart = () => setSpeaking(true)
+    utterance.onend = () => setSpeaking(false)
+    utterance.onerror = () => setSpeaking(false)
+    window.speechSynthesis.speak(utterance)
+  }
 
   const wsRef = useRef(null)
   const serverLandmarksRef = useRef([])
@@ -333,25 +356,82 @@ export function SignRecognitionCamera() {
         >
           {copied ? 'Copied!' : 'Copy Text'}
         </Button>
+
+        <Button
+          variant="ghost" size="md"
+          icon={<Volume2 size={16} className={speaking ? 'animate-bounce text-[var(--color-primary-400)]' : ''} />}
+          onClick={handleSpeak}
+          disabled={!recognizedText}
+        >
+          {speaking ? 'Speaking...' : 'Speak'}
+        </Button>
       </div>
 
       {/* Confidence */}
       {recognitionActive && <ConfidenceBar value={confidence} />}
 
+      {/* Real-Time Word Autocomplete Suggestions */}
+      {suggestions.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-2 p-2.5 rounded-xl bg-[var(--color-bg-surface-2)] border border-[var(--color-primary-500)]/30 flex-wrap"
+        >
+          <div className="flex items-center gap-1 text-xs text-[var(--color-primary-400)] font-medium shrink-0">
+            <Sparkles size={13} />
+            <span>Autocomplete:</span>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {suggestions.map((item, idx) => (
+              <button
+                key={idx}
+                onClick={() => setRecognizedText(item.replacementText)}
+                className="text-xs px-3 py-1 rounded-lg bg-[var(--color-primary-500)]/15 border border-[var(--color-primary-500)]/40 text-[var(--color-primary-300)] font-semibold hover:bg-[var(--color-primary-500)]/30 hover:border-[var(--color-primary-400)] transition-all flex items-center gap-1 group"
+              >
+                <span>{item.word}</span>
+                <CornerDownLeft size={11} className="opacity-60 group-hover:opacity-100" />
+              </button>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
       {/* Recognized text area */}
-      <div className="card p-4 min-h-[100px] relative">
+      <div className="card p-4 min-h-[110px] relative">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-medium text-[var(--color-text-muted)] uppercase tracking-wider">Recognized Text</span>
-          <Badge variant="accent">ASL Alphabet → Text</Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="accent">ASL Alphabet → Text</Badge>
+          </div>
         </div>
+
         {recognizedText ? (
-          <p className="text-lg font-medium text-[var(--color-text-primary)] leading-relaxed">
-            {recognizedText}
-            {recognitionActive && !recognitionPaused && <span className="typing-cursor" />}
-          </p>
+          <div className="space-y-3">
+            <p className="text-lg font-medium text-[var(--color-text-primary)] leading-relaxed font-mono tracking-wide">
+              {recognizedText}
+              {recognitionActive && !recognitionPaused && <span className="typing-cursor" />}
+            </p>
+
+            {/* Quick helper controls */}
+            <div className="flex items-center gap-2 pt-2 border-t border-[var(--color-border)]/50">
+              <button
+                onClick={() => setRecognizedText(recognizedText.trimEnd() + ' ')}
+                className="text-xs px-2.5 py-1 rounded-md bg-[var(--color-bg-surface-3)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white transition-colors"
+              >
+                + Space
+              </button>
+              <button
+                onClick={() => setRecognizedText(recognizedText.slice(0, -1))}
+                className="text-xs px-2.5 py-1 rounded-md bg-[var(--color-bg-surface-3)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white transition-colors flex items-center gap-1"
+              >
+                <Delete size={12} />
+                <span>Backspace</span>
+              </button>
+            </div>
+          </div>
         ) : (
           <p className="text-[var(--color-text-muted)] text-sm">
-            Start the camera and perform signs — recognized text will appear here.
+            Start the camera and perform signs — recognized letters will automatically combine into words here.
           </p>
         )}
       </div>

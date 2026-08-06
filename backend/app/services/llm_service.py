@@ -19,7 +19,7 @@ def correct_sentence(raw_text: str) -> str:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are a sign language translator. Convert the given sequence of broken words/signs into a grammatically correct and natural English sentence. Do not add any conversational filler. Only return the translated sentence."},
+                {"role": "system", "content": "You are an expert Sign Language Assistant. The user input contains raw recognized sign letters or broken words. Transform it into a grammatically correct, natural English sentence. Capitalize appropriately and fix typos or missed letters if context allows. Output only the final corrected sentence without explanations or quotes."},
                 {"role": "user", "content": raw_text}
             ],
             temperature=0.3

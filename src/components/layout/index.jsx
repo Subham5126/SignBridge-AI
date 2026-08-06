@@ -7,6 +7,7 @@ import {
   Bell, Search, Moon, Sun, Accessibility, Globe
 } from 'lucide-react'
 import { useAppStore } from '@/stores/useAppStore'
+import { isProfileComplete } from '@/lib/profileUtils'
 import { Button } from '@/components/ui'
 
 const NAV_ITEMS = [
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
 export function Sidebar({ collapsed, onToggle }) {
   const location = useLocation()
   const { user, logout } = useAppStore()
+  const profileDone = isProfileComplete(user)
 
   return (
     <motion.aside
@@ -52,6 +54,27 @@ export function Sidebar({ collapsed, onToggle }) {
       <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto overflow-x-hidden">
         {NAV_ITEMS.map(({ path, label, icon: Icon }) => {
           const active = location.pathname === path
+          const disabled = !profileDone
+
+          if (disabled) {
+            return (
+              <div
+                key={path}
+                className="sidebar-item opacity-40 cursor-not-allowed"
+                title="Complete your profile first"
+              >
+                <Icon size={18} className="shrink-0" />
+                <AnimatePresence>
+                  {!collapsed && (
+                    <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="whitespace-nowrap text-sm">
+                      {label}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </div>
+            )
+          }
+
           return (
             <Link key={path} to={path}>
               <motion.div
@@ -135,10 +158,14 @@ export function Sidebar({ collapsed, onToggle }) {
 
 export function TopBar({ sidebarCollapsed }) {
   const location = useLocation()
-  const { highContrast, largeText, toggleHighContrast, toggleLargeText, language, setLanguage } = useAppStore()
+  const { user, highContrast, largeText, toggleHighContrast, toggleLargeText, language, setLanguage } = useAppStore()
   const [showSearch, setShowSearch] = useState(false)
+  const profileDone = isProfileComplete(user)
 
   const getPageTitle = () => {
+    if (location.pathname === '/app/profile' && !profileDone) {
+      return 'Complete Your Profile'
+    }
     const map = {
       '/app': 'Dashboard',
       '/app/recognize': 'Live Sign Recognition',
@@ -197,8 +224,12 @@ export function TopBar({ sidebarCollapsed }) {
         </button>
 
         {/* User avatar */}
-        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[var(--color-primary-600)] to-[var(--color-accent-500)] flex items-center justify-center text-xs font-bold text-white cursor-pointer">
-          U
+        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[var(--color-primary-600)] to-[var(--color-accent-500)] flex items-center justify-center text-xs font-bold text-white cursor-pointer overflow-hidden">
+          {user?.user_metadata?.avatar_url ? (
+            <img src={user.user_metadata.avatar_url} alt="" className="w-full h-full object-cover" />
+          ) : (
+            (user?.user_metadata?.name || user?.email || 'U')[0].toUpperCase()
+          )}
         </div>
       </div>
     </header>

@@ -7,7 +7,7 @@ import { useAppStore } from '@/stores/useAppStore'
 import { ISL_PHRASES } from '@/data/islSigns'
 
 export function RecognizePage() {
-  const { recognizedText, recognitionHistory } = useAppStore()
+  const { recognizedText, recognitionHistory, setRecognizedText } = useAppStore()
   const [aiCorrected, setAiCorrected] = useState('')
   const [correcting, setCorrecting] = useState(false)
 
@@ -31,6 +31,13 @@ export function RecognizePage() {
     }
   }
 
+  const applyCorrection = () => {
+    if (aiCorrected && !aiCorrected.startsWith('[')) {
+      setRecognizedText(aiCorrected)
+      setAiCorrected('')
+    }
+  }
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
       {/* Camera + controls */}
@@ -44,37 +51,48 @@ export function RecognizePage() {
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            className="card p-5"
+            className="card p-5 border border-[var(--color-primary-500)]/30"
           >
             <div className="flex items-center gap-2 mb-3">
               <Zap size={16} className="text-[var(--color-primary-400)]" />
-              <h3 className="font-semibold text-sm text-[var(--color-text-secondary)]">AI Sentence Correction</h3>
-              <Badge variant="primary">GPT-4</Badge>
+              <h3 className="font-semibold text-sm text-[var(--color-text-secondary)]">AI Sentence Formatter</h3>
+              <Badge variant="primary">GPT-4o-mini</Badge>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <p className="text-xs text-[var(--color-text-muted)] mb-1">Raw Signs</p>
-                <div className="p-3 rounded-xl bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] text-sm text-[var(--color-text-secondary)] font-mono">
+                <p className="text-xs text-[var(--color-text-muted)] mb-1">Raw Recognized Letters/Signs</p>
+                <div className="p-3 rounded-xl bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] text-sm text-[var(--color-text-secondary)] font-mono break-words min-h-[48px]">
                   {recognizedText || '—'}
                 </div>
               </div>
               <div>
-                <p className="text-xs text-[var(--color-text-muted)] mb-1">Corrected Sentence</p>
-                <div className="p-3 rounded-xl bg-[var(--color-bg-surface-2)] border border-[var(--color-primary-500)]/20 text-sm text-[var(--color-text-primary)]">
-                  {aiCorrected || <span className="text-[var(--color-text-muted)]">Click correct to improve...</span>}
+                <p className="text-xs text-[var(--color-text-muted)] mb-1">Corrected Natural Sentence</p>
+                <div className="p-3 rounded-xl bg-[var(--color-bg-surface-2)] border border-[var(--color-primary-500)]/20 text-sm text-[var(--color-text-primary)] min-h-[48px]">
+                  {aiCorrected || <span className="text-[var(--color-text-muted)] italic">Click "Improve with AI" to generate natural English sentence...</span>}
                 </div>
               </div>
             </div>
 
-            <Button
-              variant="primary" size="sm" className="mt-3"
-              icon={<Zap size={14} />}
-              loading={correcting}
-              onClick={correctSentence}
-            >
-              Improve with AI
-            </Button>
+            <div className="flex items-center gap-2 mt-4">
+              <Button
+                variant="primary" size="sm"
+                icon={<Zap size={14} />}
+                loading={correcting}
+                onClick={correctSentence}
+              >
+                Improve with AI
+              </Button>
+
+              {aiCorrected && !aiCorrected.startsWith('[') && (
+                <Button
+                  variant="accent" size="sm"
+                  onClick={applyCorrection}
+                >
+                  Apply AI Sentence
+                </Button>
+              )}
+            </div>
           </motion.div>
         )}
       </div>
@@ -91,9 +109,9 @@ export function RecognizePage() {
             {[
               { n: '1', text: 'Allow webcam access when prompted' },
               { n: '2', text: 'Click "Start Recognition" to begin' },
-              { n: '3', text: 'Perform ISL signs in front of the camera' },
-              { n: '4', text: 'AI detects landmarks and classifies signs' },
-              { n: '5', text: 'Use "AI Improve" for natural sentences' },
+              { n: '3', text: 'Perform ASL signs in front of the camera' },
+              { n: '4', text: 'PyTorch model detects landmarks and classifies letters' },
+              { n: '5', text: 'Use Autocomplete or "Improve with AI" to format full sentences' },
             ].map(step => (
               <li key={step.n} className="flex items-start gap-2.5">
                 <div className="w-5 h-5 rounded-full bg-[var(--color-primary-600)]/20 border border-[var(--color-primary-500)]/20 flex items-center justify-center shrink-0 mt-0.5">
@@ -109,9 +127,10 @@ export function RecognizePage() {
         <Card className="p-4">
           <div className="space-y-2">
             {[
-              { label: 'AI Model', value: 'MediaPipe Hands v1' },
-              { label: 'Language', value: 'Indian Sign Language (ISL)' },
-              { label: 'Processing', value: 'Browser (Client-Side)' },
+              { label: 'AI Landmark Model', value: 'MediaPipe Hands v1' },
+              { label: 'Classifier', value: 'PyTorch MLP (29 Classes)' },
+              { label: 'Sign Language', value: 'ASL Alphabet (A–Z)' },
+              { label: 'Processing', value: 'Hybrid (PyTorch + WebSockets)' },
               { label: 'Latency', value: '<50ms' },
             ].map(item => (
               <div key={item.label} className="flex justify-between items-center text-xs">

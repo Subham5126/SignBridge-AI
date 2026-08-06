@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     
     # API Keys
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+
+    # Google OAuth (verify ID tokens from frontend GIS)
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
     
     class Config:
         env_file = ".env"
