@@ -179,6 +179,40 @@ export function SignRecognitionCamera() {
     }
   }, [recognitionActive, recognitionPaused])
 
+  const clientHandsRef = useRef(null)
+
+  // Initialize client-side MediaPipe Hands for 60 FPS zero-lag local GPU tracking
+  useEffect(() => {
+    if (window.Hands) {
+      try {
+        const hands = new window.Hands({
+          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        })
+        hands.setOptions({
+          maxNumHands: 1,
+          modelComplexity: 1,
+          minDetectionConfidence: 0.5,
+          minTrackingConfidence: 0.5
+        })
+        hands.onResults((results) => {
+          if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            const lms = results.multiHandLandmarks[0].map(lm => ({ x: lm.x, y: lm.y, z: lm.z }))
+            serverLandmarksRef.current = lms
+
+            if (wsRef.current?.readyState === WebSocket.OPEN && wsRef.current.bufferedAmount === 0) {
+              wsRef.current.send(JSON.stringify({ landmarks: lms }))
+            }
+          } else {
+            serverLandmarksRef.current = []
+          }
+        })
+        clientHandsRef.current = hands
+      } catch (err) {
+        console.warn('Client MediaPipe init notice:', err)
+      }
+    }
+  }, [])
+
   // Main recognition loop
   useEffect(() => {
     if (!recognitionActive || recognitionPaused) {
@@ -198,10 +232,8 @@ export function SignRecognitionCamera() {
       const webcam = webcamRef.current
       
       if (canvas && webcam?.video && webcam.video.readyState === 4) {
-        // Optimize: Only get the context once, it's not strictly necessary to get it every frame but it's cheap
         const ctx = canvas.getContext('2d', { alpha: false })
         
-        // Only set width/height if it changes to avoid heavy canvas resets
         if (canvas.width !== webcam.video.videoWidth) {
            canvas.width = webcam.video.videoWidth || 640
            canvas.height = webcam.video.videoHeight || 480
@@ -209,10 +241,15 @@ export function SignRecognitionCamera() {
         
         drawOverlay(ctx, canvas.width, canvas.height, true)
 
-        // Send frame to websocket only if network buffer is clear (eliminates network lag!)
-        if (frameCountRef.current % 4 === 0 && wsRef.current?.readyState === WebSocket.OPEN) {
+        // Ultra-fast: Use client-side MediaPipe if available, otherwise send downscaled image
+        if (clientHandsRef.current && frameCountRef.current % 2 === 0) {
+          try {
+            clientHandsRef.current.send({ image: webcam.video })
+          } catch {
+            // Ignore frame send errors
+          }
+        } else if (!clientHandsRef.current && frameCountRef.current % 4 === 0 && wsRef.current?.readyState === WebSocket.OPEN) {
           if (wsRef.current.bufferedAmount === 0) {
-            // Extremely fast downscaled capture (320x240 @ 0.45 quality)
             offscreenCtx.drawImage(webcam.video, 0, 0, 320, 240)
             const frame = offscreenCanvas.toDataURL('image/jpeg', 0.45)
             wsRef.current.send(frame)
