@@ -182,58 +182,105 @@ export function SignRecognitionCamera() {
   // Main recognition loop
   useEffect(() => {
     if (!recognitionActive || recognitionPaused) {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current)
+      }
       return
     }
 
-    // Create a single offscreen canvas for ultra-light downscaling (240x180 = ~4KB payload!)
     const offscreenCanvas = document.createElement('canvas')
     offscreenCanvas.width = 240
     offscreenCanvas.height = 180
-    const offscreenCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true })
 
-    const loop = () => {
-      frameCountRef.current++
+    const offscreenCtx = offscreenCanvas.getContext('2d', {
+      willReadFrequently: true
+    })
+
+    // Keep camera/rendering smooth, but send only 10 FPS to AI.
+    const SEND_INTERVAL_MS = 100
+
+    let lastSendTime = 0
+
+    const loop = (timestamp) => {
       const canvas = canvasRef.current
       const webcam = webcamRef.current
-      
-      if (canvas && webcam?.video && webcam.video.readyState === 4) {
-        const ctx = canvas.getContext('2d', { alpha: false })
-        
-        if (canvas.width !== webcam.video.videoWidth) {
-           canvas.width = webcam.video.videoWidth || 640
-           canvas.height = webcam.video.videoHeight || 480
-        }
-        
-        drawOverlay(ctx, canvas.width, canvas.height, true)
 
-        // Send frame to websocket only if network buffer is 100% clear (zero network queue/lag!)
-        if (frameCountRef.current % 3 === 0 && wsRef.current?.readyState === WebSocket.OPEN) {
-          if (wsRef.current.bufferedAmount === 0) {
-            // Downscale to 240x180 @ 0.35 JPEG quality (~4 KB payload for sub-50ms transmission!)
-            offscreenCtx.drawImage(webcam.video, 0, 0, 240, 180)
-            const frame = offscreenCanvas.toDataURL('image/jpeg', 0.35)
-            wsRef.current.send(frame)
-          }
+      if (
+        canvas &&
+        webcam?.video &&
+        webcam.video.readyState === 4
+      ) {
+        const ctx = canvas.getContext('2d', {
+          alpha: false
+        })
+
+        if (canvas.width !== webcam.video.videoWidth) {
+          canvas.width = webcam.video.videoWidth || 640
+          canvas.height = webcam.video.videoHeight || 480
+        }
+
+        // Draw landmarks/UI at full camera FPS.
+        drawOverlay(
+          ctx,
+          canvas.width,
+          canvas.height,
+          true
+        )
+
+        // Send AI frame only every 100ms = 10 FPS.
+        if (
+          timestamp - lastSendTime >= SEND_INTERVAL_MS &&
+          wsRef.current?.readyState === WebSocket.OPEN
+        ) {
+          lastSendTime = timestamp
+
+          offscreenCtx.drawImage(
+            webcam.video,
+            0,
+            0,
+            240,
+            180
+          )
+
+          const frame =
+            offscreenCanvas.toDataURL(
+              'image/jpeg',
+              0.35
+            )
+
+          wsRef.current.send(frame)
         }
       }
 
       // FPS counter
       const fpsC = fpsCounterRef.current
       fpsC.frames++
+
       const now = Date.now()
+
       if (now - fpsC.last >= 1000) {
         setFps(fpsC.frames)
         fpsC.frames = 0
         fpsC.last = now
       }
 
-      animFrameRef.current = requestAnimationFrame(loop)
+      animFrameRef.current =
+        requestAnimationFrame(loop)
     }
 
-    animFrameRef.current = requestAnimationFrame(loop)
-    return () => { if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current) }
-  }, [recognitionActive, recognitionPaused, drawOverlay])
+    animFrameRef.current =
+      requestAnimationFrame(loop)
+
+    return () => {
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current)
+      }
+    }
+  }, [
+    recognitionActive,
+    recognitionPaused,
+    drawOverlay
+  ])
 
   // Idle overlay
   useEffect(() => {

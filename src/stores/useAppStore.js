@@ -203,7 +203,13 @@ export const useAppStore = create(
         }
 
         if (s.user?.id || s.user?.email) {
-          saveTranslationSession(s.user.id || s.user.email, sign, newText, confidence)
+          // Save asynchronously without affecting recognition UI.
+          void saveTranslationSession(
+            s.user.id || s.user.email,
+            sign,
+            newText,
+            confidence
+          )
         }
 
         return {
