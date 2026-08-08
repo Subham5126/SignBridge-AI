@@ -179,40 +179,6 @@ export function SignRecognitionCamera() {
     }
   }, [recognitionActive, recognitionPaused])
 
-  const clientHandsRef = useRef(null)
-
-  // Initialize client-side MediaPipe Hands for 60 FPS zero-lag local GPU tracking
-  useEffect(() => {
-    if (window.Hands) {
-      try {
-        const hands = new window.Hands({
-          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-        })
-        hands.setOptions({
-          maxNumHands: 1,
-          modelComplexity: 1,
-          minDetectionConfidence: 0.5,
-          minTrackingConfidence: 0.5
-        })
-        hands.onResults((results) => {
-          if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-            const lms = results.multiHandLandmarks[0].map(lm => ({ x: lm.x, y: lm.y, z: lm.z }))
-            serverLandmarksRef.current = lms
-
-            if (wsRef.current?.readyState === WebSocket.OPEN && wsRef.current.bufferedAmount === 0) {
-              wsRef.current.send(JSON.stringify({ landmarks: lms }))
-            }
-          } else {
-            serverLandmarksRef.current = []
-          }
-        })
-        clientHandsRef.current = hands
-      } catch (err) {
-        console.warn('Client MediaPipe init notice:', err)
-      }
-    }
-  }, [])
-
   // Main recognition loop
   useEffect(() => {
     if (!recognitionActive || recognitionPaused) {
@@ -220,10 +186,10 @@ export function SignRecognitionCamera() {
       return
     }
 
-    // Create a single offscreen canvas for resizing frames before sending
+    // Create a single offscreen canvas for ultra-light downscaling (240x180 = ~4KB payload!)
     const offscreenCanvas = document.createElement('canvas')
-    offscreenCanvas.width = 320
-    offscreenCanvas.height = 240
+    offscreenCanvas.width = 240
+    offscreenCanvas.height = 180
     const offscreenCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true })
 
     const loop = () => {
@@ -241,17 +207,12 @@ export function SignRecognitionCamera() {
         
         drawOverlay(ctx, canvas.width, canvas.height, true)
 
-        // Ultra-fast: Use client-side MediaPipe if available, otherwise send downscaled image
-        if (clientHandsRef.current && frameCountRef.current % 2 === 0) {
-          try {
-            clientHandsRef.current.send({ image: webcam.video })
-          } catch {
-            // Ignore frame send errors
-          }
-        } else if (!clientHandsRef.current && frameCountRef.current % 4 === 0 && wsRef.current?.readyState === WebSocket.OPEN) {
+        // Send frame to websocket only if network buffer is 100% clear (zero network queue/lag!)
+        if (frameCountRef.current % 3 === 0 && wsRef.current?.readyState === WebSocket.OPEN) {
           if (wsRef.current.bufferedAmount === 0) {
-            offscreenCtx.drawImage(webcam.video, 0, 0, 320, 240)
-            const frame = offscreenCanvas.toDataURL('image/jpeg', 0.45)
+            // Downscale to 240x180 @ 0.35 JPEG quality (~4 KB payload for sub-50ms transmission!)
+            offscreenCtx.drawImage(webcam.video, 0, 0, 240, 180)
+            const frame = offscreenCanvas.toDataURL('image/jpeg', 0.35)
             wsRef.current.send(frame)
           }
         }
