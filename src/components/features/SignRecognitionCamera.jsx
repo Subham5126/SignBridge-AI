@@ -75,7 +75,8 @@ export function SignRecognitionCamera() {
       return
     }
 
-    wsRef.current = new WebSocket('ws://localhost:8000/ws/recognize')
+    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/recognize'
+    wsRef.current = new WebSocket(wsUrl)
 
     wsRef.current.onmessage = (event) => {
       try {

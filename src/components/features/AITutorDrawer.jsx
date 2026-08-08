@@ -48,7 +48,8 @@ export function AITutorDrawer({ isOpen, onClose }) {
     try {
       const chatHistory = updatedMessages.map(m => ({ role: m.role, content: m.content }))
 
-      const res = await fetch('http://localhost:8000/api/v1/nlp/tutor', {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+      const res = await fetch(`${backendUrl}/api/v1/nlp/tutor`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
