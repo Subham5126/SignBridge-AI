@@ -59,8 +59,8 @@ export function SignRecognitionCamera() {
   // A sign must be held consistently for CONFIRM_MS before being committed.
   // After committing, a COOLDOWN_MS pause is required before the next sign.
   // This prevents the text box being flooded with every frame's prediction.
-  const CONFIRM_MS   = 1200   // ms a sign must be held steadily to be accepted
-  const COOLDOWN_MS  = 1800   // ms lockout pause after a sign is committed
+  const CONFIRM_MS   = 400    // ms a sign must be held to be accepted (fast response!)
+  const COOLDOWN_MS  = 600    // ms pause after a sign is committed before accepting next sign
   const candidateRef    = useRef('')      // sign currently being held
   const candidateStartRef = useRef(0)    // when holding started
   const lastCommitTimeRef = useRef(0)    // when last sign was committed
@@ -209,12 +209,14 @@ export function SignRecognitionCamera() {
         
         drawOverlay(ctx, canvas.width, canvas.height, true)
 
-        // Send frame to websocket at ~10 FPS to avoid overloading
-        if (frameCountRef.current % 6 === 0 && wsRef.current?.readyState === WebSocket.OPEN) {
-          // Extremely fast downscaled capture
-          offscreenCtx.drawImage(webcam.video, 0, 0, 320, 240)
-          const frame = offscreenCanvas.toDataURL('image/jpeg', 0.5)
-          wsRef.current.send(frame)
+        // Send frame to websocket only if network buffer is clear (eliminates network lag!)
+        if (frameCountRef.current % 4 === 0 && wsRef.current?.readyState === WebSocket.OPEN) {
+          if (wsRef.current.bufferedAmount === 0) {
+            // Extremely fast downscaled capture (320x240 @ 0.45 quality)
+            offscreenCtx.drawImage(webcam.video, 0, 0, 320, 240)
+            const frame = offscreenCanvas.toDataURL('image/jpeg', 0.45)
+            wsRef.current.send(frame)
+          }
         }
       }
 
