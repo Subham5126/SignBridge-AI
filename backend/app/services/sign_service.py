@@ -7,8 +7,22 @@ import base64
 import time
 import os
 
+# Helper to resolve asset paths across local and Docker container environments
+def get_asset_path(filename):
+    candidates = [
+        filename,
+        os.path.join(os.path.dirname(__file__), '../../', filename),
+        os.path.join(os.path.dirname(__file__), '../', filename),
+        os.path.join('/app', filename),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return os.path.abspath(path)
+    return filename
+
 # Initialize the HandLandmarker using the Tasks API
-base_options = python.BaseOptions(model_asset_path='hand_landmarker.task')
+task_model_path = get_asset_path('hand_landmarker.task')
+base_options = python.BaseOptions(model_asset_path=task_model_path)
 options = vision.HandLandmarkerOptions(
     base_options=base_options,
     num_hands=2,
@@ -27,14 +41,17 @@ pytorch_model = None
 class_mapping = {}
 
 try:
+    mapping_path = get_asset_path('models/class_mapping.json')
+    model_path = get_asset_path('models/sign_model.pt')
+
     # Load class mapping
-    with open('models/class_mapping.json', 'r') as f:
+    with open(mapping_path, 'r') as f:
         mapping = json.load(f)
         class_mapping = {int(k): v for k, v in mapping.items()}
         
     # Load model
     pytorch_model = SignClassifier(input_size=63, num_classes=len(class_mapping))
-    pytorch_model.load_state_dict(torch.load('models/sign_model.pt', map_location=torch.device('cpu')))
+    pytorch_model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
     pytorch_model.eval()
     print("Successfully loaded PyTorch SignClassifier model!")
 except Exception as e:
