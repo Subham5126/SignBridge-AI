@@ -30,8 +30,11 @@ export const useAppStore = create(
       // Conversation
       conversations: [],
 
-      // Learning
+      // Learning & Quiz
       activePracticeSeconds: 0,
+      quizXP: 0,
+      quizHighScore: 0,
+      activeDaysLog: {},
       learningProgress: {
         streak: 1,
         totalSigns: 0,
@@ -175,6 +178,13 @@ export const useAppStore = create(
       setRecognizedText: (text) => set({ recognizedText: text }),
 
       addRecognizedSign: (sign, confidence) => set((s) => {
+        // Prevent spamming identical letter within 1.5 seconds
+        const lastEntry = s.recognitionHistory[0]
+        const now = Date.now()
+        if (lastEntry && lastEntry.sign === sign && (now - lastEntry.timestamp < 1500)) {
+          return { currentSign: sign, confidence }
+        }
+
         let newText = s.recognizedText
 
         // Special signs
@@ -207,6 +217,40 @@ export const useAppStore = create(
         }
       }),
 
+      recordActiveDay: () => set((s) => {
+        const todayStr = new Date().toISOString().split('T')[0]
+        const updatedLog = { ...(s.activeDaysLog || {}), [todayStr]: true }
+
+        let currentStreak = 0
+        let checkDate = new Date()
+
+        for (let i = 0; i < 365; i++) {
+          const dateKey = checkDate.toISOString().split('T')[0]
+          if (updatedLog[dateKey]) {
+            currentStreak++
+            checkDate.setDate(checkDate.getDate() - 1)
+          } else {
+            break
+          }
+        }
+
+        return {
+          activeDaysLog: updatedLog,
+          learningProgress: {
+            ...s.learningProgress,
+            streak: Math.max(1, currentStreak)
+          }
+        }
+      }),
+
+      addQuizXP: (amount, score) => set((s) => {
+        const newXP = (s.quizXP || 0) + amount
+        const newHighScore = Math.max(s.quizHighScore || 0, score || 0)
+        return {
+          quizXP: newXP,
+          quizHighScore: newHighScore
+        }
+      }),
       incrementPracticeSeconds: (sec = 1) => set((s) => ({ activePracticeSeconds: (s.activePracticeSeconds || 0) + sec })),
       addConversation: (msg) => set((s) => ({
         conversations: [...s.conversations, { ...msg, id: Date.now() }],
@@ -235,6 +279,9 @@ export const useAppStore = create(
         activePracticeSeconds: state.activePracticeSeconds,
         userHistoryStore: state.userHistoryStore,
         registeredUsers: state.registeredUsers,
+        quizXP: state.quizXP,
+        quizHighScore: state.quizHighScore,
+        activeDaysLog: state.activeDaysLog,
       }),
     }
   )

@@ -59,8 +59,8 @@ export function SignRecognitionCamera() {
   // A sign must be held consistently for CONFIRM_MS before being committed.
   // After committing, a COOLDOWN_MS pause is required before the next sign.
   // This prevents the text box being flooded with every frame's prediction.
-  const CONFIRM_MS   = 1000   // ms a sign must be held to be accepted
-  const COOLDOWN_MS  = 1200   // ms lockout after a sign is committed
+  const CONFIRM_MS   = 1200   // ms a sign must be held steadily to be accepted
+  const COOLDOWN_MS  = 1800   // ms lockout pause after a sign is committed
   const candidateRef    = useRef('')      // sign currently being held
   const candidateStartRef = useRef(0)    // when holding started
   const lastCommitTimeRef = useRef(0)    // when last sign was committed

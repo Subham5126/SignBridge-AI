@@ -46,8 +46,9 @@ def classify_landmarks(landmarks):
     if pytorch_model is not None and class_mapping:
         try:
             features = []
+            wrist = landmarks[0]
             for lm in landmarks:
-                features.extend([lm.x, lm.y, lm.z])
+                features.extend([lm.x - wrist.x, lm.y - wrist.y, lm.z - wrist.z])
                 
             input_tensor = torch.tensor([features], dtype=torch.float32)
             
@@ -60,8 +61,8 @@ def classify_landmarks(landmarks):
                 sign = class_mapping[class_idx]
                 conf_score = int(confidence.item() * 100)
                 
-                # Skip 'nothing' class — it means no meaningful sign
-                if sign.lower() == 'nothing':
+                # Skip 'nothing', 'all', or invalid classes — they mean no gesture
+                if sign.lower() in ['nothing', 'all', 'unknown']:
                     return "UNKNOWN", 0
                 
                 if conf_score >= 50:

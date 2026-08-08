@@ -41,7 +41,7 @@ def find_model():
             return path
     return None
 
-def extract_landmarks_from_dataset(dataset_path: str, output_csv: str = 'data/isl_landmarks.csv'):
+def extract_landmarks_from_dataset(dataset_path: str, output_csv: str = 'data/isl_landmarks.csv', max_per_class: int = 0):
     print(f"\n--- LANDMARK EXTRACTION FROM IMAGE DATASET ---")
     print(f"Dataset: {dataset_path}")
 
@@ -91,6 +91,9 @@ def extract_landmarks_from_dataset(dataset_path: str, output_csv: str = 'data/is
             print(f"  [SKIP] {class_name}: no images found")
             continue
 
+        if max_per_class > 0 and len(image_files) > max_per_class:
+            image_files = image_files[:max_per_class]
+
         class_success = 0
         
         for img_path in image_files:
@@ -110,10 +113,11 @@ def extract_landmarks_from_dataset(dataset_path: str, output_csv: str = 'data/is
                 if result.hand_landmarks:
                     hand = result.hand_landmarks[0]
                     
-                    # Flatten 21 landmarks × 3 = 63 features
+                    # Flatten 21 landmarks × 3 = 63 features (wrist-relative)
+                    wrist = hand[0]
                     row = []
                     for lm in hand:
-                        row.extend([lm.x, lm.y, lm.z])
+                        row.extend([lm.x - wrist.x, lm.y - wrist.y, lm.z - wrist.z])
                     
                     # Normalize label: replace underscores and uppercased
                     label = class_name.upper().replace('_', ' ')
@@ -159,6 +163,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Extract MediaPipe landmarks from image dataset')
     parser.add_argument('--dataset', required=True, help='Path to dataset root folder (with class subfolders)')
     parser.add_argument('--output', default='data/isl_landmarks.csv', help='Output CSV path')
+    parser.add_argument('--max_per_class', type=int, default=0, help='Max images to process per class (0 = all)')
     args = parser.parse_args()
     
-    extract_landmarks_from_dataset(args.dataset, args.output)
+    extract_landmarks_from_dataset(args.dataset, args.output, args.max_per_class)

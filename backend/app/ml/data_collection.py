@@ -7,9 +7,8 @@ import pandas as pd
 import time
 import os
 
-# Define the signs you want to record
-# To add a new sign, just add it to this list
-SIGNS = ["HELLO", "THANK YOU", "PLEASE", "VICTORY", "GOOD"]
+# Define the signs you want to record (A-Z + SPACE + DEL + NOTHING)
+SIGNS = [chr(i) for i in range(65, 91)] + ["SPACE", "DEL", "NOTHING"]
 NUM_SAMPLES_PER_SIGN = 100 # How many frames to record per sign
 
 def main():
@@ -78,10 +77,11 @@ def main():
                 # We extract the first hand found
                 hand = result.hand_landmarks[0]
                 
-                # Flatten the 21 landmarks into a single array of 63 floats (x, y, z)
+                # Flatten the 21 landmarks into wrist-relative coordinates
+                wrist = hand[0]
                 row = []
                 for lm in hand:
-                    row.extend([lm.x, lm.y, lm.z])
+                    row.extend([lm.x - wrist.x, lm.y - wrist.y, lm.z - wrist.z])
                     
                 # Add the label
                 row.append(sign)
