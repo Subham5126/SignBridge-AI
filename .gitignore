@@ -23,12 +23,12 @@ backend/app/**/__pycache__/
 backend/.env
 .env
 
-# ─── ML / Data (too large for GitHub) ────────
+# ─── ML / Data ────────────────────────────────
 backend/data/dataset/
 backend/data/isl_landmarks.csv
-backend/models/sign_model.pt
-backend/models/class_mapping.json
-backend/hand_landmarker.task
+!backend/models/sign_model.pt
+!backend/models/class_mapping.json
+!backend/hand_landmarker.task
 
 # ─── Editor / OS ─────────────────────────────
 .vscode/*
