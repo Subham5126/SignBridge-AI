@@ -121,14 +121,15 @@ export function TwoWayConversation() {
   useEffect(() => {
     if (!signActive) return
 
-    const ws = new WebSocket('ws://localhost:8000/ws/recognize')
+    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/recognize'
+    const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
     let candidate = ''
     let candidateStart = 0
     let lastCommit = 0
-    const CONFIRM_MS = 1000
-    const COOLDOWN_MS = 1200
+    const CONFIRM_MS = 400
+    const COOLDOWN_MS = 600
 
     ws.onmessage = (event) => {
       try {
@@ -137,7 +138,7 @@ export function TwoWayConversation() {
 
         if (now - lastCommit < COOLDOWN_MS) return
 
-        if (data.sign && data.sign !== 'UNKNOWN' && data.confidence >= 65) {
+        if (data.sign && data.sign !== 'UNKNOWN' && data.confidence >= 60) {
           if (data.sign === candidate) {
             if (now - candidateStart >= CONFIRM_MS) {
               // Commit sign
@@ -163,7 +164,7 @@ export function TwoWayConversation() {
     }
 
     const offscreen = document.createElement('canvas')
-    offscreen.width = 320; offscreen.height = 240
+    offscreen.width = 240; offscreen.height = 180
     const offCtx = offscreen.getContext('2d', { willReadFrequently: true })
     let count = 0
 
@@ -171,10 +172,12 @@ export function TwoWayConversation() {
       count++
       const webcam = webcamRef.current
       if (webcam?.video && webcam.video.readyState === 4) {
-        if (count % 6 === 0 && wsRef.current?.readyState === WebSocket.OPEN) {
-          offCtx.drawImage(webcam.video, 0, 0, 320, 240)
-          const frame = offscreen.toDataURL('image/jpeg', 0.5)
-          wsRef.current.send(frame)
+        if (count % 4 === 0 && wsRef.current?.readyState === WebSocket.OPEN) {
+          if (wsRef.current.bufferedAmount === 0) {
+            offCtx.drawImage(webcam.video, 0, 0, 240, 180)
+            const frame = offscreen.toDataURL('image/jpeg', 0.35)
+            wsRef.current.send(frame)
+          }
         }
       }
       animFrameRef.current = requestAnimationFrame(sendLoop)
@@ -197,7 +200,8 @@ export function TwoWayConversation() {
     // Improve with AI if connected
     try {
       setAiCorrecting(true)
-      const res = await fetch('http://localhost:8000/api/v1/nlp/correct', {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+      const res = await fetch(`${backendUrl}/api/v1/nlp/correct`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ raw_text: raw })

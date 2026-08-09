@@ -67,7 +67,8 @@ function QuizChallengeModal({ onClose }) {
   useEffect(() => {
     if (!gameStarted || gameOver) return
 
-    const ws = new WebSocket('ws://localhost:8000/ws/recognize')
+    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/recognize'
+    const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
     ws.onmessage = (event) => {
@@ -102,23 +103,25 @@ function QuizChallengeModal({ onClose }) {
     }
 
     const offscreen = document.createElement('canvas')
-    offscreen.width = 320; offscreen.height = 240
+    offscreen.width = 240; offscreen.height = 180
     const offCtx = offscreen.getContext('2d', { willReadFrequently: true })
 
     const sendLoop = () => {
       if (webcamRef.current && webcamRef.current.video && webcamRef.current.video.readyState === 4 && ws.readyState === WebSocket.OPEN) {
-        offCtx.drawImage(webcamRef.current.video, 0, 0, 320, 240)
-        const frameData = offscreen.toDataURL('image/jpeg', 0.6)
-        ws.send(JSON.stringify({ image: frameData }))
+        if (ws.bufferedAmount === 0) {
+          offCtx.drawImage(webcamRef.current.video, 0, 0, 240, 180)
+          const frameData = offscreen.toDataURL('image/jpeg', 0.35)
+          ws.send(frameData)
+        }
       }
     }
 
-    const interval = setInterval(sendLoop, 150)
+    const interval = setInterval(sendLoop, 120)
     return () => {
       clearInterval(interval)
       if (ws.readyState === WebSocket.OPEN) ws.close()
     }
-  }, [gameStarted, gameOver, currentTarget, combo])
+  }, [gameStarted, gameOver, currentTarget, combo, addQuizXP])
 
   return (
     <motion.div
@@ -321,7 +324,7 @@ function PracticeModal({ sign, onClose }) {
   const [score, setScore] = useState(null)
   const [detectedSign, setDetectedSign] = useState('')
   const [liveConfidence, setLiveConfidence] = useState(0)
-  const [webcamActive, setWebcamActive] = useState(false)
+  const [webcamActive, setWebcamActive] = useState(true)
   const webcamRef = useRef(null)
   const wsRef = useRef(null)
 
@@ -330,7 +333,8 @@ function PracticeModal({ sign, onClose }) {
   useEffect(() => {
     if (!webcamActive) return
 
-    const ws = new WebSocket('ws://localhost:8000/ws/recognize')
+    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/recognize'
+    const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
     ws.onmessage = (event) => {
@@ -350,18 +354,20 @@ function PracticeModal({ sign, onClose }) {
     }
 
     const offscreen = document.createElement('canvas')
-    offscreen.width = 320; offscreen.height = 240
+    offscreen.width = 240; offscreen.height = 180
     const offCtx = offscreen.getContext('2d', { willReadFrequently: true })
 
     const sendLoop = () => {
       if (webcamRef.current && webcamRef.current.video && webcamRef.current.video.readyState === 4 && ws.readyState === WebSocket.OPEN) {
-        offCtx.drawImage(webcamRef.current.video, 0, 0, 320, 240)
-        const frameData = offscreen.toDataURL('image/jpeg', 0.6)
-        ws.send(JSON.stringify({ image: frameData }))
+        if (ws.bufferedAmount === 0) {
+          offCtx.drawImage(webcamRef.current.video, 0, 0, 240, 180)
+          const frameData = offscreen.toDataURL('image/jpeg', 0.35)
+          ws.send(frameData)
+        }
       }
     }
 
-    const interval = setInterval(sendLoop, 150)
+    const interval = setInterval(sendLoop, 120)
     return () => {
       clearInterval(interval)
       if (ws.readyState === WebSocket.OPEN) ws.close()
