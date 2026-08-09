@@ -90,8 +90,47 @@ export function TwoWayConversation() {
   const recognitionRef = useRef(null)
   const timerRef = useRef(null)
   const webcamRef = useRef(null)
+  const canvasRef = useRef(null)
   const wsRef = useRef(null)
   const animFrameRef = useRef(null)
+
+  const drawLandmarkOverlay = (landmarks) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    const w = canvas.width = 640
+    const h = canvas.height = 480
+    ctx.clearRect(0, 0, w, h)
+
+    if (!landmarks || landmarks.length === 0) return
+
+    const connections = [
+      [0, 1], [1, 2], [2, 3], [3, 4], // Thumb
+      [0, 5], [5, 6], [6, 7], [7, 8], // Index
+      [5, 9], [9, 10], [10, 11], [11, 12], // Middle
+      [9, 13], [13, 14], [14, 15], [15, 16], // Ring
+      [13, 17], [17, 18], [18, 19], [19, 20], // Pinky
+      [0, 17] // Palm base
+    ]
+
+    ctx.strokeStyle = 'rgba(167,139,250,0.85)'
+    ctx.lineWidth = 3
+
+    connections.forEach(([i, j]) => {
+      if (!landmarks[i] || !landmarks[j]) return
+      ctx.beginPath()
+      ctx.moveTo((1 - landmarks[i].x) * w, landmarks[i].y * h)
+      ctx.lineTo((1 - landmarks[j].x) * w, landmarks[j].y * h)
+      ctx.stroke()
+    })
+
+    ctx.fillStyle = 'rgba(124,58,237,0.95)'
+    landmarks.forEach(lm => {
+      ctx.beginPath()
+      ctx.arc((1 - lm.x) * w, lm.y * h, 4, 0, Math.PI * 2)
+      ctx.fill()
+    })
+  }
 
   // Auto scroll
   useEffect(() => {
@@ -135,6 +174,10 @@ export function TwoWayConversation() {
       try {
         const data = JSON.parse(event.data)
         const now = Date.now()
+
+        if (data.landmarks) {
+          drawLandmarkOverlay(data.landmarks)
+        }
 
         if (now - lastCommit < COOLDOWN_MS) return
 
@@ -298,12 +341,18 @@ export function TwoWayConversation() {
         {/* Live Camera Feed */}
         <div className="flex-1 relative rounded-xl bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] min-h-[220px] flex items-center justify-center overflow-hidden">
           {signActive ? (
-            <Webcam
-              ref={webcamRef}
-              audio={false}
-              mirrored
-              className="w-full h-full object-cover"
-            />
+            <>
+              <Webcam
+                ref={webcamRef}
+                audio={false}
+                mirrored
+                className="w-full h-full object-cover"
+              />
+              <canvas
+                ref={canvasRef}
+                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+              />
+            </>
           ) : (
             <div className="text-center p-4">
               <Camera size={32} className="mx-auto mb-2 text-[var(--color-primary-400)]" />
