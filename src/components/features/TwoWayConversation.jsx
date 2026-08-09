@@ -93,6 +93,7 @@ export function TwoWayConversation() {
   const canvasRef = useRef(null)
   const wsRef = useRef(null)
   const animFrameRef = useRef(null)
+  const processingFrameRef = useRef(false)
 
   const drawLandmarkOverlay = (landmarks) => {
     const canvas = canvasRef.current
@@ -171,6 +172,7 @@ export function TwoWayConversation() {
     const COOLDOWN_MS = 600
 
     ws.onmessage = (event) => {
+      processingFrameRef.current = false
       try {
         const data = JSON.parse(event.data)
         const now = Date.now()
@@ -215,8 +217,9 @@ export function TwoWayConversation() {
       count++
       const webcam = webcamRef.current
       if (webcam?.video && webcam.video.readyState === 4) {
-        if (count % 4 === 0 && wsRef.current?.readyState === WebSocket.OPEN) {
+        if (count % 4 === 0 && wsRef.current?.readyState === WebSocket.OPEN && !processingFrameRef.current) {
           if (wsRef.current.bufferedAmount === 0) {
+            processingFrameRef.current = true
             offCtx.drawImage(webcam.video, 0, 0, 240, 180)
             const frame = offscreen.toDataURL('image/jpeg', 0.35)
             wsRef.current.send(frame)

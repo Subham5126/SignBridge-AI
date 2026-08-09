@@ -152,6 +152,10 @@ export async function updateUserProfile(name, bio) {
  * Save translation session to Supabase database
  */
 export async function saveTranslationSession(userId, rawText, correctedText, confidence) {
+  if (!isSupabaseConfigured()) {
+    return { data: null, error: null }
+  }
+
   try {
     const { data, error } = await supabase
       .from('translations')
@@ -165,7 +169,7 @@ export async function saveTranslationSession(userId, rawText, correctedText, con
     if (error) throw error
     return { data, error: null }
   } catch (err) {
-    console.warn('Supabase DB save fallback:', err.message)
+    console.warn('Supabase DB save error:', err.message)
     return { data: null, error: err.message }
   }
 }

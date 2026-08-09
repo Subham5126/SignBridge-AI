@@ -53,6 +53,7 @@ export function SignRecognitionCamera() {
 
   const wsRef = useRef(null)
   const serverLandmarksRef = useRef([])
+  const processingFrameRef = useRef(false)
 
   // Setup WebSocket connection
   // ── Sign Confirmation Logic ──────────────────────────────────────────
@@ -72,6 +73,7 @@ export function SignRecognitionCamera() {
       if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
       candidateRef.current = ''
       candidateStartRef.current = 0
+      processingFrameRef.current = false
       return
     }
 
@@ -79,6 +81,7 @@ export function SignRecognitionCamera() {
     wsRef.current = new WebSocket(wsUrl)
 
     wsRef.current.onmessage = (event) => {
+      processingFrameRef.current = false
       try {
         const data = JSON.parse(event.data)
 
@@ -227,12 +230,14 @@ export function SignRecognitionCamera() {
           true
         )
 
-        // Send AI frame only every 100ms = 10 FPS.
+        // Send AI frame only every 100ms = 10 FPS and ONLY when backend is ready (1 frame in-flight max!)
         if (
           timestamp - lastSendTime >= SEND_INTERVAL_MS &&
-          wsRef.current?.readyState === WebSocket.OPEN
+          wsRef.current?.readyState === WebSocket.OPEN &&
+          !processingFrameRef.current
         ) {
           lastSendTime = timestamp
+          processingFrameRef.current = true
 
           offscreenCtx.drawImage(
             webcam.video,
