@@ -151,25 +151,48 @@ export async function updateUserProfile(name, bio) {
 /**
  * Save translation session to Supabase database
  */
-export async function saveTranslationSession(userId, rawText, correctedText, confidence) {
-  if (!isSupabaseConfigured()) {
-    return { data: null, error: null }
-  }
+export async function saveTranslationSession(
+    userId,
+    rawText,
+    correctedText,
+    confidence
+) {
+    if (!isSupabaseConfigured()) {
+        return { data: null, error: null }
+    }
 
-  try {
-    const { data, error } = await supabase
-      .from('translations')
-      .insert([{
-        user_id: userId,
-        raw_text: rawText,
-        corrected_text: correctedText,
-        confidence,
-        created_at: new Date().toISOString(),
-      }])
-    if (error) throw error
-    return { data, error: null }
-  } catch (err) {
-    console.warn('Supabase DB save error:', err.message)
-    return { data: null, error: err.message }
-  }
+    try {
+        const { data: authData, error: authError } =
+            await supabase.auth.getUser()
+
+        if (authError || !authData?.user) {
+            return {
+                data: null,
+                error: authError?.message || "Not authenticated"
+            }
+        }
+
+        const realUserId = authData.user.id
+
+        const { data, error } = await supabase
+            .from("translations")
+            .insert([{
+                user_id: realUserId,
+                raw_text: rawText,
+                corrected_text: correctedText,
+                confidence: confidence,
+                created_at: new Date().toISOString(),
+            }])
+
+        if (error) throw error
+
+        return { data, error: null }
+    } catch (err) {
+        console.warn("Supabase DB save error:", err.message)
+
+        return {
+            data: null,
+            error: err.message
+        }
+    }
 }

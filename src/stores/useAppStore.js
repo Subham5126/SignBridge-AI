@@ -202,10 +202,10 @@ export const useAppStore = create(
           newText = newText + sign
         }
 
-        if (s.user?.id || s.user?.email) {
+        if (s.user?.id) {
           // Save asynchronously without affecting recognition UI.
           void saveTranslationSession(
-            s.user.id || s.user.email,
+            s.user.id,
             sign,
             newText,
             confidence
