@@ -23,6 +23,10 @@ export const useAppStore = create(
       recognitionHistory: [],
       confidence: 0,
 
+      // Recognition throttle state
+      lastSavedSign: null,
+      lastSavedAt: 0,
+
       // Speech state
       speechActive: false,
       speechTranscript: [],
@@ -202,7 +206,13 @@ export const useAppStore = create(
           newText = newText + sign
         }
 
-        if (s.user?.id) {
+        const isNewSign = s.lastSavedSign !== sign
+        const cooldownFinished = now - (s.lastSavedAt || 0) >= 1000
+
+        let lastSavedSign = s.lastSavedSign
+        let lastSavedAt = s.lastSavedAt
+
+        if (isNewSign && cooldownFinished && s.user?.id) {
           // Save asynchronously without affecting recognition UI.
           void saveTranslationSession(
             s.user.id,
@@ -210,14 +220,18 @@ export const useAppStore = create(
             newText,
             confidence
           )
+          lastSavedSign = sign
+          lastSavedAt = now
         }
 
         return {
           currentSign: sign,
           confidence,
           recognizedText: newText,
+          lastSavedSign,
+          lastSavedAt,
           recognitionHistory: [
-            { sign, confidence, timestamp: Date.now() },
+            { sign, confidence, timestamp: now },
             ...s.recognitionHistory.slice(0, 49),
           ],
         }
