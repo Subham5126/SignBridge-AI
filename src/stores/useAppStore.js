@@ -5,11 +5,12 @@ import { saveTranslationSession } from '@/lib/supabase'
 export const useAppStore = create(
   persist(
     (set, get) => ({
-      // Theme / Accessibility
+      // Theme / Accessibility & Display Mode
       theme: 'dark',
       highContrast: false,
       largeText: false,
       language: 'en',
+      displayMode: 'desktop', // 'desktop' | 'mobile'
 
       // User
       user: null,
@@ -83,6 +84,8 @@ export const useAppStore = create(
       toggleHighContrast: () => set((s) => ({ highContrast: !s.highContrast })),
       toggleLargeText: () => set((s) => ({ largeText: !s.largeText })),
       setLanguage: (language) => set({ language }),
+      setDisplayMode: (displayMode) => set({ displayMode }),
+      toggleDisplayMode: () => set((s) => ({ displayMode: s.displayMode === 'desktop' ? 'mobile' : 'desktop' })),
 
       setUser: (newUser) => set((s) => {
         const storeMap = { ...s.userHistoryStore }

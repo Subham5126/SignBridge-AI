@@ -415,3 +415,41 @@ body {
   -webkit-box-shadow: 0 0 0px 1000px rgba(22, 24, 35, 0.85) inset !important;
   transition: background-color 5000s ease-in-out 0s;
 }
+
+/* =========================================
+   SIGNBRIDGE DISPLAY MODES (DESKTOP ↔ MOBILE)
+   ========================================= */
+.mobile-mode {
+  --mobile-padding: 12px;
+}
+
+.mobile-mode .sidebar {
+  display: none !important;
+}
+
+.mobile-mode .main-content {
+  margin-left: 0 !important;
+  width: 100% !important;
+  padding-bottom: 90px !important;
+}
+
+.mobile-mode header {
+  left: 0 !important;
+}
+
+.mobile-mode .page-content {
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 10px !important;
+}
+
+.mobile-mode .card {
+  width: 100% !important;
+  border-radius: 20px !important;
+}
+
+.mobile-mode video,
+.mobile-mode canvas {
+  width: 100% !important;
+  max-width: 100% !important;
+}

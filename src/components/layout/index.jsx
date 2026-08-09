@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Hand, Type, Mic, MessageSquare, BookOpen,
   Settings, LogOut, ChevronLeft, ChevronRight, Zap, Menu, X,
-  Bell, Search, Moon, Sun, Accessibility, Globe
+  Bell, Search, Moon, Sun, Accessibility, Globe, Smartphone, Monitor
 } from 'lucide-react'
 import { useAppStore } from '@/stores/useAppStore'
 import { isProfileComplete } from '@/lib/profileUtils'
@@ -156,9 +156,9 @@ export function Sidebar({ collapsed, onToggle }) {
   )
 }
 
-export function TopBar({ sidebarCollapsed }) {
+export function TopBar({ sidebarCollapsed, isMobileView }) {
   const location = useLocation()
-  const { user, highContrast, largeText, toggleHighContrast, toggleLargeText, language, setLanguage } = useAppStore()
+  const { user, highContrast, largeText, toggleHighContrast, toggleLargeText, language, setLanguage, displayMode, toggleDisplayMode } = useAppStore()
   const [showSearch, setShowSearch] = useState(false)
   const profileDone = isProfileComplete(user)
 
@@ -180,12 +180,31 @@ export function TopBar({ sidebarCollapsed }) {
 
   return (
     <header
-      className="fixed top-0 right-0 h-14 flex items-center justify-between px-4 gap-4 border-b border-[var(--color-border)] bg-[var(--color-bg-surface)]/80 backdrop-blur-xl z-30 transition-all duration-300"
-      style={{ left: sidebarCollapsed ? 64 : 240 }}
+      className="fixed top-0 right-0 h-14 flex items-center justify-between px-4 gap-3 border-b border-[var(--color-border)] bg-[var(--color-bg-surface)]/80 backdrop-blur-xl z-30 transition-all duration-300"
+      style={{ left: isMobileView ? 0 : (sidebarCollapsed ? 64 : 240) }}
     >
-      <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">{getPageTitle()}</h1>
+      <h1 className="text-sm font-semibold text-[var(--color-text-primary)] truncate">{getPageTitle()}</h1>
 
       <div className="flex items-center gap-2 ml-auto">
+        {/* Desktop ↔ Mobile Display Mode Toggle Button */}
+        <button
+          onClick={toggleDisplayMode}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-primary)] hover:border-[var(--color-primary-500)]/50 transition-all cursor-pointer shadow-sm shrink-0"
+          title={`Switch to ${displayMode === 'desktop' ? 'Mobile' : 'Desktop'} View`}
+        >
+          {displayMode === 'desktop' ? (
+            <>
+              <Smartphone size={14} className="text-purple-400" />
+              <span className="hidden sm:inline">Mobile View</span>
+            </>
+          ) : (
+            <>
+              <Monitor size={14} className="text-cyan-400" />
+              <span className="hidden sm:inline">Desktop View</span>
+            </>
+          )}
+        </button>
+
         {/* Language selector */}
         <select
           value={language}
