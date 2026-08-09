@@ -11,6 +11,7 @@ import { SpeechPage } from '@/pages/SpeechPage'
 import { ConversationPage } from '@/pages/ConversationPage'
 import { LearnPage } from '@/pages/LearnPage'
 import { ProfilePage } from '@/pages/ProfilePage'
+import { InkCursor } from '@/components/ui/InkCursor'
 import { useAppStore } from '@/stores/useAppStore'
 import { restoreAuthSession, onAuthStateChange } from '@/lib/supabase'
 import { isProfileComplete, getPostLoginPath } from '@/lib/profileUtils'
@@ -91,6 +92,9 @@ function AuthBootstrap() {
 export default function App() {
   return (
     <BrowserRouter>
+      {/* Global Liquid Ink Splatter Cursor */}
+      <InkCursor />
+
       <AuthBootstrap />
       <Routes>
         {/* Public routes */}

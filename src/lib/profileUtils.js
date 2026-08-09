@@ -38,6 +38,7 @@ export function getPostLoginPath(user) {
 
 export function getProfileDefaults(user) {
   const meta = user?.user_metadata || {}
+  const customAvatar = user?.custom_avatar_url || meta.custom_avatar_url
   return {
     name: meta.name || user?.email?.split('@')[0] || '',
     role: meta.role || '',
@@ -46,6 +47,6 @@ export function getProfileDefaults(user) {
     primary_goal: meta.primary_goal || '',
     bio: meta.bio || '',
     location: meta.location || '',
-    avatar_url: meta.avatar_url || '',
+    avatar_url: customAvatar || user?.avatar_url || meta.avatar_url || '',
   }
 }

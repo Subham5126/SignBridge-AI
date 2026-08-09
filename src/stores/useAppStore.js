@@ -102,13 +102,24 @@ export const useAppStore = create(
         let profileToUse = newUser
         if (newUser?.email) {
           const emailKey = newUser.email.toLowerCase()
-          if (s.registeredUsers[emailKey]) {
+          const existingUser = s.registeredUsers[emailKey]
+          if (existingUser) {
+            const customAvatar = existingUser.custom_avatar_url || existingUser.user_metadata?.custom_avatar_url || existingUser.avatar_url
+            const isGoogleDefault = customAvatar && customAvatar.includes('googleusercontent.com')
+            const finalCustom = isGoogleDefault ? (existingUser.custom_avatar_url || null) : customAvatar
+            
+            const activeAvatar = finalCustom || newUser.user_metadata?.avatar_url || newUser.avatar_url || existingUser.avatar_url
+
             profileToUse = {
-              ...s.registeredUsers[emailKey],
+              ...existingUser,
               ...newUser,
+              custom_avatar_url: finalCustom,
+              avatar_url: activeAvatar,
               user_metadata: {
-                ...(s.registeredUsers[emailKey]?.user_metadata || {}),
-                ...(newUser?.user_metadata || {})
+                ...(newUser?.user_metadata || {}),
+                ...(existingUser?.user_metadata || {}),
+                custom_avatar_url: finalCustom,
+                avatar_url: activeAvatar
               }
             }
           }

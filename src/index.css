@@ -376,3 +376,42 @@ body {
 .badge-success { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2); }
 .badge-warning { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.2); }
 .badge-error { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
+
+/* True Liquid Glassmorphism Styling */
+.liquid-glass-card {
+  background: rgba(18, 20, 29, 0.45) !important;
+  backdrop-filter: blur(50px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(50px) saturate(200%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 
+    0 32px 100px -12px rgba(0, 0, 0, 0.85),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.liquid-input {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  backdrop-filter: blur(10px);
+}
+
+.liquid-input::placeholder {
+  color: rgba(255, 255, 255, 0.35) !important;
+}
+
+.liquid-input:focus {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Chrome/Safari Autofill Override to prevent white background */
+.liquid-input:-webkit-autofill,
+.liquid-input:-webkit-autofill:hover,
+.liquid-input:-webkit-autofill:focus,
+.liquid-input:-webkit-autofill:active {
+  -webkit-text-fill-color: #ffffff !important;
+  -webkit-box-shadow: 0 0 0px 1000px rgba(22, 24, 35, 0.85) inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
