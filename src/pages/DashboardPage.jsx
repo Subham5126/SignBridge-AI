@@ -11,6 +11,7 @@ import {
 import { StatCard, Card, Badge, ProgressRing, Button } from '@/components/ui'
 import { useAppStore } from '@/stores/useAppStore'
 import { Link } from 'react-router-dom'
+import { useTranslation } from '@/lib/i18n'
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload?.length) {
@@ -29,7 +30,8 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export function DashboardPage() {
-  const { user, stats, savedPhrases, learningProgress, recognitionHistory, activePracticeSeconds } = useAppStore()
+  const { user, language, stats, savedPhrases, learningProgress, recognitionHistory, activePracticeSeconds } = useAppStore()
+  const { t } = useTranslation(language)
 
   // Format active practice duration dynamically
   const formattedPracticeTime = useMemo(() => {
@@ -98,89 +100,135 @@ export function DashboardPage() {
       }
     })
 
-    return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => {
-      const dayStat = statsByDay[day]
-      const count = dayStat.count
-      const avgAcc = count > 0 ? Math.round(dayStat.totalConf / count) : 0
-      return {
-        day,
-        signs: count,
-        accuracy: avgAcc
-      }
-    })
+    return Object.entries(statsByDay).map(([day, val]) => ({
+      day,
+      signs: val.count,
+      accuracy: val.count > 0 ? Math.round(val.totalConf / val.count) : 0
+    }))
   }, [recognitionHistory])
 
   const userName = user?.user_metadata?.name || user?.name || 'Signer'
 
   return (
     <div className="space-y-6">
-      {/* Welcome banner */}
+      {/* Welcome Section v2 */}
       <motion.div
-        initial={{ opacity: 0, y: 16 }}
+        initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-2xl p-6 border border-[var(--color-primary-500)]/30 shadow-[0_0_30px_rgba(124,58,237,0.15)]"
-        style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.15) 0%, rgba(6,182,212,0.08) 100%)' }}
+        className="p-6 rounded-2xl bg-[var(--color-bg-surface)] border border-[var(--color-border)] shadow-sm flex items-center justify-between flex-wrap gap-4"
       >
-        <div className="glow-orb w-48 h-48 bg-[var(--color-primary-600)] right-0 top-0 opacity-20" />
-        <div className="relative z-10 flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Badge variant="primary" className="flex items-center gap-1">
-                <Flame size={12} className="text-amber-400 fill-amber-400" /> {learningProgress.streak} day streak
-              </Badge>
-              <Badge variant="success" className="flex items-center gap-1">
-                <Zap size={12} /> Real-time Live Sync
-              </Badge>
-            </div>
-            <h2 className="text-2xl font-black text-[var(--color-text-primary)]">
-              Welcome back, {userName}! 👋
-            </h2>
-            <p className="text-sm text-[var(--color-text-muted)] mt-1 max-w-xl">
-              You have captured <span className="font-bold text-[var(--color-primary-400)]">{totalLiveSigns} live signs</span> across <span className="font-bold text-[var(--color-accent-400)]">{uniqueSignsCount || 1} unique gestures</span> with an average accuracy of <span className="font-bold text-green-400">{liveAvgAccuracy}%</span>.
-            </p>
-          </div>
-
-          <Link to="/app/recognize">
-            <Button variant="primary" size="md" iconRight={<ArrowRight size={16} />} className="shadow-lg">
-              Launch AI Camera
-            </Button>
-          </Link>
+        <div>
+          <h2 className="text-2xl font-bold text-[var(--color-text-primary)]">
+            {t('goodEvening', 'Good evening')}, {userName}
+          </h2>
+          <p className="text-sm text-[var(--color-text-secondary)] mt-1">
+            {t('welcomeSubtitle', 'Continue your sign-language journey with real-time AI recognition & practice.')}
+          </p>
         </div>
+
+        <Link to="/app/recognize">
+          <Button variant="primary" size="md" iconRight={<ArrowRight size={16} />}>
+            {t('startSigning', 'Start Signing')}
+          </Button>
+        </Link>
       </motion.div>
 
-      {/* Real-time Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Stats Cards (v2 Clean Grid) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <StatCard
-          title="Live Signs Detected"
-          value={totalLiveSigns}
-          subtitle="session captures"
-          icon={<Hand size={18} />}
-          color="#7c3aed"
-          trend={totalLiveSigns > 0 ? 100 : 0}
-        />
-        <StatCard
-          title="Live Accuracy"
-          value={`${liveAvgAccuracy}%`}
-          subtitle="avg confidence score"
-          icon={<Activity size={18} />}
-          color="#10b981"
-          trend={5}
-        />
-        <StatCard
-          title="Unique Signs"
-          value={uniqueSignsCount}
-          subtitle="mastered gestures"
-          icon={<Trophy size={18} />}
-          color="#06b6d4"
-          trend={8}
-        />
-        <StatCard
-          title="Active Practice Time"
-          value={formattedPracticeTime}
-          subtitle="live time with camera active"
-          icon={<Clock size={18} />}
+          title={t('streak', 'Streak')}
+          value={`${learningProgress.streak} ${t('days', 'Days')}`}
+          subtitle="daily consistency"
+          icon={<Flame size={18} />}
           color="#f59e0b"
         />
+        <StatCard
+          title={t('signsDetected', 'Signs Detected')}
+          value={totalLiveSigns}
+          subtitle="live captures"
+          icon={<Hand size={18} />}
+          color="#7c3aed"
+        />
+        <StatCard
+          title={t('accuracy', 'Accuracy')}
+          value={`${liveAvgAccuracy}%`}
+          subtitle="average confidence"
+          icon={<Activity size={18} />}
+          color="#10b981"
+        />
+        <StatCard
+          title={t('practiceTime', 'Practice Time')}
+          value={formattedPracticeTime}
+          subtitle="active camera session"
+          icon={<Clock size={18} />}
+          color="#06b6d4"
+        />
+      </div>
+
+      {/* Quick Actions Grid (16px Border Radius Cards) */}
+      <div className="space-y-3">
+        <h3 className="text-xs font-bold text-[var(--color-text-muted)] uppercase tracking-wider">{t('quickActions', 'Quick Actions')}</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Link to="/app/recognize" className="group">
+            <Card hover className="p-5 border border-[var(--color-border)] h-full flex flex-col justify-between">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2.5 rounded-xl bg-[var(--color-primary-600)]/15 border border-[var(--color-primary-500)]/30 text-[var(--color-primary-400)]">
+                  <Hand size={20} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-[var(--color-text-primary)] group-hover:text-[var(--color-primary-400)] transition-colors">{t('recognizeTitle', 'Recognize')}</h4>
+                  <p className="text-xs text-[var(--color-text-muted)]">{t('recognizeSub', 'Start live camera')}</p>
+                </div>
+              </div>
+              <p className="text-xs text-[var(--color-text-secondary)] mt-2">{t('recognizeDesc', 'Real-time ASL hand gesture recognition via webcam.')}</p>
+            </Card>
+          </Link>
+
+          <Link to="/app/learn" className="group">
+            <Card hover className="p-5 border border-[var(--color-border)] h-full flex flex-col justify-between">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
+                  <BookOpen size={20} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-[var(--color-text-primary)] group-hover:text-amber-400 transition-colors">{t('practiceTitle', 'Practice')}</h4>
+                  <p className="text-xs text-[var(--color-text-muted)]">{t('practiceSub', 'Test your skills')}</p>
+                </div>
+              </div>
+              <p className="text-xs text-[var(--color-text-secondary)] mt-2">{t('practiceDesc', 'Interactive sign language flashcards & quizzes.')}</p>
+            </Card>
+          </Link>
+
+          <Link to="/app/conversation" className="group">
+            <Card hover className="p-5 border border-[var(--color-border)] h-full flex flex-col justify-between">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2.5 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400">
+                  <MessageSquare size={20} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-[var(--color-text-primary)] group-hover:text-cyan-400 transition-colors">{t('chatTitle', 'Conversation')}</h4>
+                  <p className="text-xs text-[var(--color-text-muted)]">{t('chatSub', 'Two-way chat')}</p>
+                </div>
+              </div>
+              <p className="text-xs text-[var(--color-text-secondary)] mt-2">{t('chatDesc', 'Bi-directional sign to text & speech translation.')}</p>
+            </Card>
+          </Link>
+
+          <Link to="/app/speech" className="group">
+            <Card hover className="p-5 border border-[var(--color-border)] h-full flex flex-col justify-between">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
+                  <Zap size={20} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-[var(--color-text-primary)] group-hover:text-emerald-400 transition-colors">{t('speechTitle', 'Speech Mode')}</h4>
+                  <p className="text-xs text-[var(--color-text-muted)]">{t('speechSub', 'Voice to sign')}</p>
+                </div>
+              </div>
+              <p className="text-xs text-[var(--color-text-secondary)] mt-2">{t('speechDesc', 'Convert spoken voice directly to ASL sign visuals.')}</p>
+            </Card>
+          </Link>
+        </div>
       </div>
 
       {/* Real-time Charts row */}

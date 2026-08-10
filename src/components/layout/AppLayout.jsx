@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Sidebar, TopBar } from '@/components/layout'
@@ -10,15 +10,19 @@ import { clsx } from 'clsx'
 export function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const [tutorOpen, setTutorOpen] = useState(false)
-  const { highContrast, largeText, displayMode } = useAppStore()
+  const { theme, highContrast, largeText, displayMode } = useAppStore()
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme || 'dark')
+  }, [theme])
 
   const isMobileView = displayMode === 'mobile'
 
   return (
     <div
       className={clsx(
-        'min-h-screen relative transition-colors app-layout',
-        isMobileView ? 'mobile-mode bg-[#08080E]' : 'desktop-mode bg-[var(--color-bg-base)]',
+        'min-h-screen relative transition-colors app-layout bg-[var(--color-bg-base)] text-[var(--color-text-primary)]',
+        isMobileView ? 'mobile-mode' : 'desktop-mode',
         highContrast && 'high-contrast',
         largeText && 'large-text'
       )}
@@ -46,14 +50,14 @@ export function AppLayout() {
 
       {/* Mobile Bottom Navigation Bar (Rendered when in Mobile displayMode) */}
       {isMobileView && (
-        <nav className="mobile-bottom-nav fixed bottom-0 left-0 right-0 h-16 bg-[#0E0F18]/95 backdrop-blur-2xl border-t border-white/10 z-50 flex items-center justify-around px-2 shadow-[0_-10px_30px_rgba(0,0,0,0.6)]">
+        <nav className="mobile-bottom-nav fixed bottom-0 left-0 right-0 h-16 bg-[var(--color-bg-surface)]/95 backdrop-blur-2xl border-t border-[var(--color-border)] z-50 flex items-center justify-around px-2 shadow-lg">
           <NavLink
             to="/app"
             end
             className={({ isActive }) =>
               clsx(
                 'flex flex-col items-center gap-1 text-[11px] font-semibold transition-all py-1 px-3 rounded-xl',
-                isActive ? 'text-purple-400 bg-purple-500/15' : 'text-slate-400 hover:text-white'
+                isActive ? 'text-[var(--color-primary-400)] bg-[var(--color-primary-500)]/15' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
               )
             }
           >
@@ -66,7 +70,7 @@ export function AppLayout() {
             className={({ isActive }) =>
               clsx(
                 'flex flex-col items-center gap-1 text-[11px] font-semibold transition-all py-1 px-3 rounded-xl',
-                isActive ? 'text-purple-400 bg-purple-500/15' : 'text-slate-400 hover:text-white'
+                isActive ? 'text-[var(--color-primary-400)] bg-[var(--color-primary-500)]/15' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
               )
             }
           >
@@ -79,7 +83,7 @@ export function AppLayout() {
             className={({ isActive }) =>
               clsx(
                 'flex flex-col items-center gap-1 text-[11px] font-semibold transition-all py-1 px-3 rounded-xl',
-                isActive ? 'text-purple-400 bg-purple-500/15' : 'text-slate-400 hover:text-white'
+                isActive ? 'text-[var(--color-primary-400)] bg-[var(--color-primary-500)]/15' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
               )
             }
           >
@@ -92,7 +96,7 @@ export function AppLayout() {
             className={({ isActive }) =>
               clsx(
                 'flex flex-col items-center gap-1 text-[11px] font-semibold transition-all py-1 px-3 rounded-xl',
-                isActive ? 'text-purple-400 bg-purple-500/15' : 'text-slate-400 hover:text-white'
+                isActive ? 'text-[var(--color-primary-400)] bg-[var(--color-primary-500)]/15' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
               )
             }
           >
@@ -105,7 +109,7 @@ export function AppLayout() {
             className={({ isActive }) =>
               clsx(
                 'flex flex-col items-center gap-1 text-[11px] font-semibold transition-all py-1 px-3 rounded-xl',
-                isActive ? 'text-purple-400 bg-purple-500/15' : 'text-slate-400 hover:text-white'
+                isActive ? 'text-[var(--color-primary-400)] bg-[var(--color-primary-500)]/15' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
               )
             }
           >

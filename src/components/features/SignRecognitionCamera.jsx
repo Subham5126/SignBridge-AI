@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import Webcam from 'react-webcam'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Camera, CameraOff, Pause, Play, RotateCcw, Copy, Mic, AlertCircle, Volume2, Sparkles, CornerDownLeft, Delete } from 'lucide-react'
@@ -6,6 +7,7 @@ import { Button, ConfidenceBar, Badge, GlowDot } from '@/components/ui'
 import { useAppStore } from '@/stores/useAppStore'
 import { ISL_SIGNS } from '@/data/islSigns'
 import { getWordSuggestions } from '@/data/commonWords'
+import { useTranslation } from '@/lib/i18n'
 
 // WebSocket logic connects to the real MediaPipe backend
 
@@ -17,11 +19,14 @@ export function SignRecognitionCamera() {
   const lastSignRef = useRef('')
 
   const {
+    language,
     recognitionActive, recognitionPaused,
     startRecognition, pauseRecognition, stopRecognition,
     resetRecognition, addRecognizedSign, setRecognizedText,
     recognizedText, confidence, currentSign, incrementPracticeSeconds
   } = useAppStore()
+
+  const { t } = useTranslation(language)
 
   // Track active practice seconds in real time
   useEffect(() => {
@@ -55,16 +60,12 @@ export function SignRecognitionCamera() {
   const serverLandmarksRef = useRef([])
   const processingFrameRef = useRef(false)
 
-  // Setup WebSocket connection
-  // ── Sign Confirmation Logic ──────────────────────────────────────────
-  // A sign must be held consistently for CONFIRM_MS before being committed.
-  // After committing, a COOLDOWN_MS pause is required before the next sign.
-  // This prevents the text box being flooded with every frame's prediction.
-  const CONFIRM_MS   = 400    // ms a sign must be held to be accepted (fast response!)
-  const COOLDOWN_MS  = 600    // ms pause after a sign is committed before accepting next sign
-  const candidateRef    = useRef('')      // sign currently being held
-  const candidateStartRef = useRef(0)    // when holding started
-  const lastCommitTimeRef = useRef(0)    // when last sign was committed
+  // Setup WebSocket connection for ASL Alphabet recognition
+  const CONFIRM_MS   = 400    // ms a sign must be held to be accepted
+  const COOLDOWN_MS  = 600    // ms pause after a sign is committed
+  const candidateRef    = useRef('')
+  const candidateStartRef = useRef(0)
+  const lastCommitTimeRef = useRef(0)
   const resetTimerRef    = useRef(null)
 
   useEffect(() => {
@@ -77,7 +78,9 @@ export function SignRecognitionCamera() {
       return
     }
 
-    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/recognize'
+    const defaultWsUrl = 'ws://localhost:8000/ws/recognize'
+    const wsUrl = import.meta.env.VITE_WS_URL || defaultWsUrl
+
     wsRef.current = new WebSocket(wsUrl)
 
     wsRef.current.onmessage = (event) => {
@@ -85,40 +88,31 @@ export function SignRecognitionCamera() {
       try {
         const data = JSON.parse(event.data)
 
-        // Update canvas landmarks regardless
         if (data.landmarks) {
           serverLandmarksRef.current = data.landmarks
         }
 
         const now = Date.now()
-
-        // Still in post-commit cooldown — ignore everything
         if (now - lastCommitTimeRef.current < COOLDOWN_MS) return
 
         if (data.sign && data.sign !== 'UNKNOWN' && data.confidence >= 70) {
           if (data.sign === candidateRef.current) {
-            // Same sign — check if held long enough to commit
             if (now - candidateStartRef.current >= CONFIRM_MS) {
-              // ✅ COMMIT: sign held long enough!
-              lastSignRef.current = data.sign
               lastCommitTimeRef.current = now
-              candidateRef.current = ''       // reset so it can re-appear later
+              candidateRef.current = ''
               candidateStartRef.current = 0
               addRecognizedSign(data.sign, data.confidence)
             }
-            // else: still holding, not long enough yet — do nothing
           } else {
-            // New candidate sign — start the hold timer
             candidateRef.current = data.sign
             candidateStartRef.current = now
           }
         } else {
-          // No clear sign — reset the candidate
           candidateRef.current = ''
           candidateStartRef.current = 0
         }
       } catch (e) {
-        console.error('WS parse error', e)
+        console.warn('WS message parse error:', e)
       }
     }
 
@@ -336,14 +330,15 @@ export function SignRecognitionCamera() {
         {/* Status overlay */}
         <div className="absolute top-3 left-3 flex items-center gap-2">
           <GlowDot active={recognitionActive && !recognitionPaused} color="#10b981" />
-          <span className="text-xs font-medium text-white bg-black/50 px-2 py-0.5 rounded-full backdrop-blur-sm">
-            {recognitionActive && !recognitionPaused ? 'LIVE' : recognitionPaused ? 'PAUSED' : 'READY'}
+          <span className="text-xs font-semibold text-white bg-black/60 px-2.5 py-1 rounded-full backdrop-blur-md border border-white/10 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            {recognitionActive && !recognitionPaused ? t('aiConnected', 'AI Connected') : recognitionPaused ? t('pause', 'PAUSED') : t('cameraReady', 'READY')}
           </span>
         </div>
 
         {/* FPS indicator */}
         {recognitionActive && (
-          <div className="absolute top-3 right-3 text-xs font-mono text-[var(--color-primary-400)] bg-black/50 px-2 py-0.5 rounded-full backdrop-blur-sm">
+          <div className="absolute top-3 right-3 text-xs font-mono text-[var(--color-primary-400)] bg-black/60 px-2.5 py-1 rounded-full backdrop-blur-md border border-white/10">
             {fps} FPS
           </div>
         )}
@@ -356,9 +351,10 @@ export function SignRecognitionCamera() {
               initial={{ opacity: 0, y: 20, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10 }}
-              className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-md px-6 py-2 rounded-full border border-[var(--color-primary-500)]/40"
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/75 backdrop-blur-lg px-6 py-2.5 rounded-2xl border border-[var(--color-primary-500)]/40 shadow-xl flex items-center gap-2"
             >
-              <span className="text-xl font-bold gradient-text">{currentSign}</span>
+              <span className="text-xs text-[var(--color-text-muted)] uppercase font-semibold">{t('detectedSign', 'Detected Sign')}:</span>
+              <span className="text-2xl font-black text-white">{currentSign}</span>
             </motion.div>
           )}
         </AnimatePresence>
@@ -367,60 +363,74 @@ export function SignRecognitionCamera() {
         {!recognitionActive && cameraReady && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
-              <Camera size={32} className="mx-auto mb-2 text-[var(--color-primary-400)]" />
-              <p className="text-sm text-[var(--color-text-muted)]">Press Start to begin recognition</p>
+              <Camera size={36} className="mx-auto mb-2 text-[var(--color-primary-400)]" />
+              <p className="text-sm font-semibold text-[var(--color-text-primary)]">{t('cameraReady', 'Camera Ready')}</p>
+              <p className="text-xs text-[var(--color-text-muted)] mt-0.5">Click "{t('startRecognition', 'Start Recognition')}" to begin AI detection</p>
             </div>
           </div>
         )}
       </div>
 
-      {/* Controls */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {!recognitionActive ? (
-          <Button variant="primary" size="md" icon={<Camera size={16} />} onClick={startRecognition} disabled={cameraError}>
-            Start Recognition
-          </Button>
-        ) : (
+      {/* Primary & Secondary Action Controls */}
+      <div className="flex items-center gap-2 flex-wrap justify-between">
+        <div className="flex items-center gap-2 flex-wrap">
+          {!recognitionActive ? (
+            <Button variant="primary" size="md" icon={<Camera size={16} />} onClick={startRecognition} disabled={cameraError}>
+              {t('startRecognition', 'Start Recognition')}
+            </Button>
+          ) : (
+            <Button
+              variant={recognitionPaused ? 'primary' : 'secondary'}
+              size="md"
+              icon={recognitionPaused ? <Play size={16} /> : <Pause size={16} />}
+              onClick={pauseRecognition}
+            >
+              {recognitionPaused ? t('resume', 'Resume') : t('pause', 'Pause')}
+            </Button>
+          )}
+
+          {recognitionActive && (
+            <Button variant="secondary" size="md" icon={<CameraOff size={16} />} onClick={stopRecognition}>
+              {t('stop', 'Stop')}
+            </Button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
-            variant={recognitionPaused ? 'accent' : 'secondary'}
-            size="md"
-            icon={recognitionPaused ? <Play size={16} /> : <Pause size={16} />}
-            onClick={pauseRecognition}
+            variant="secondary" size="md"
+            icon={<Volume2 size={16} className={speaking ? 'animate-bounce text-[var(--color-primary-400)]' : ''} />}
+            onClick={handleSpeak}
+            disabled={!recognizedText}
           >
-            {recognitionPaused ? 'Resume' : 'Pause'}
+            {speaking ? t('speaking', 'Speaking...') : t('speak', 'Speak')}
           </Button>
-        )}
 
-        {recognitionActive && (
-          <Button variant="secondary" size="md" icon={<CameraOff size={16} />} onClick={stopRecognition}>
-            Stop
+          <Button
+            variant="secondary" size="md"
+            icon={<Copy size={16} />}
+            onClick={handleCopy}
+            disabled={!recognizedText}
+          >
+            {copied ? t('copied', 'Copied!') : t('copyText', 'Copy Text')}
           </Button>
-        )}
 
-        <Button variant="ghost" size="md" icon={<RotateCcw size={16} />} onClick={resetRecognition}>
-          Reset
-        </Button>
+          <Button
+            variant="ghost" size="md"
+            icon={<Delete size={15} />}
+            onClick={() => setRecognizedText(recognizedText.slice(0, -1))}
+            disabled={!recognizedText}
+          >
+            {t('undo', 'Undo')}
+          </Button>
 
-        <Button
-          variant="ghost" size="md"
-          icon={<Copy size={16} />}
-          onClick={handleCopy}
-          disabled={!recognizedText}
-        >
-          {copied ? 'Copied!' : 'Copy Text'}
-        </Button>
-
-        <Button
-          variant="ghost" size="md"
-          icon={<Volume2 size={16} className={speaking ? 'animate-bounce text-[var(--color-primary-400)]' : ''} />}
-          onClick={handleSpeak}
-          disabled={!recognizedText}
-        >
-          {speaking ? 'Speaking...' : 'Speak'}
-        </Button>
+          <Button variant="ghost" size="md" icon={<RotateCcw size={15} />} onClick={resetRecognition} disabled={!recognizedText && !recognitionActive}>
+            {t('clear', 'Clear')}
+          </Button>
+        </div>
       </div>
 
-      {/* Confidence */}
+      {/* Confidence Bar */}
       {recognitionActive && <ConfidenceBar value={confidence} />}
 
       {/* Real-Time Word Autocomplete Suggestions */}
@@ -428,18 +438,18 @@ export function SignRecognitionCamera() {
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center gap-2 p-2.5 rounded-xl bg-[var(--color-bg-surface-2)] border border-[var(--color-primary-500)]/30 flex-wrap"
+          className="p-3 rounded-xl bg-[var(--color-bg-surface-2)] border border-[var(--color-border)]"
         >
-          <div className="flex items-center gap-1 text-xs text-[var(--color-primary-400)] font-medium shrink-0">
-            <Sparkles size={13} />
-            <span>Autocomplete:</span>
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--color-text-muted)] mb-2">
+            <Sparkles size={13} className="text-amber-400" />
+            <span>{t('autocompleteSuggestions', 'Autocomplete Word Suggestions')}:</span>
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex flex-wrap gap-1.5">
             {suggestions.map((item, idx) => (
               <button
                 key={idx}
                 onClick={() => setRecognizedText(item.replacementText)}
-                className="text-xs px-3 py-1 rounded-lg bg-[var(--color-primary-500)]/15 border border-[var(--color-primary-500)]/40 text-[var(--color-primary-300)] font-semibold hover:bg-[var(--color-primary-500)]/30 hover:border-[var(--color-primary-400)] transition-all flex items-center gap-1 group"
+                className="text-xs px-3 py-1 rounded-lg bg-[var(--color-primary-500)]/15 border border-[var(--color-primary-500)]/40 text-[var(--color-primary-300)] font-semibold hover:bg-[var(--color-primary-500)]/30 hover:border-[var(--color-primary-400)] transition-all flex items-center gap-1 group cursor-pointer"
               >
                 <span>{item.word}</span>
                 <CornerDownLeft size={11} className="opacity-60 group-hover:opacity-100" />
@@ -449,13 +459,11 @@ export function SignRecognitionCamera() {
         </motion.div>
       )}
 
-      {/* Recognized text area */}
-      <div className="card p-4 min-h-[110px] relative">
+      {/* Recognized text card */}
+      <div className="card p-4 min-h-[110px] relative border border-[var(--color-border)]">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium text-[var(--color-text-muted)] uppercase tracking-wider">Recognized Text</span>
-          <div className="flex items-center gap-2">
-            <Badge variant="accent">ASL Alphabet → Text</Badge>
-          </div>
+          <span className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">{t('recognizedTextLabel', 'Recognized Text')}</span>
+          <Badge variant="accent">ASL Alphabet → Text</Badge>
         </div>
 
         {recognizedText ? (
@@ -465,17 +473,16 @@ export function SignRecognitionCamera() {
               {recognitionActive && !recognitionPaused && <span className="typing-cursor" />}
             </p>
 
-            {/* Quick helper controls */}
-            <div className="flex items-center gap-2 pt-2 border-t border-[var(--color-border)]/50">
+            <div className="flex items-center gap-2 pt-2 border-t border-[var(--color-border)]">
               <button
                 onClick={() => setRecognizedText(recognizedText.trimEnd() + ' ')}
-                className="text-xs px-2.5 py-1 rounded-md bg-[var(--color-bg-surface-3)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white transition-colors"
+                className="text-xs px-3 py-1 rounded-lg bg-[var(--color-bg-surface-3)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors cursor-pointer"
               >
                 + Space
               </button>
               <button
                 onClick={() => setRecognizedText(recognizedText.slice(0, -1))}
-                className="text-xs px-2.5 py-1 rounded-md bg-[var(--color-bg-surface-3)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white transition-colors flex items-center gap-1"
+                className="text-xs px-3 py-1 rounded-lg bg-[var(--color-bg-surface-3)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors flex items-center gap-1 cursor-pointer"
               >
                 <Delete size={12} />
                 <span>Backspace</span>

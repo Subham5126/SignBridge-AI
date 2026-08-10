@@ -158,4 +158,46 @@ def predict_gesture(data_input) -> dict:
         
     except Exception as e:
         print(f"Prediction error: {e}")
-        return {"error": str(e)}
+        return {"sign": None, "confidence": 0, "landmarks": []}
+
+def extract_landmarks_from_base64(data_input) -> list:
+    """
+    Extracts 21 3D hand landmarks [[x, y, z], ...] from base64 image or landmark payload.
+    """
+    try:
+        if isinstance(data_input, dict) and "landmarks" in data_input:
+            lm_list = data_input["landmarks"]
+            if lm_list and len(lm_list) == 21:
+                return [[lm.get("x", 0.0), lm.get("y", 0.0), lm.get("z", 0.0)] for lm in lm_list]
+
+        if isinstance(data_input, str):
+            data_str = data_input.strip()
+            if data_str.startswith("{") and "landmarks" in data_str:
+                import json as json_lib
+                try:
+                    parsed = json_lib.loads(data_str)
+                    return extract_landmarks_from_base64(parsed)
+                except Exception:
+                    pass
+
+            frame_data_b64 = data_str
+            if "," in frame_data_b64:
+                frame_data_b64 = frame_data_b64.split(",")[1]
+
+            img_bytes = base64.b64decode(frame_data_b64)
+            np_arr = np.frombuffer(img_bytes, np.uint8)
+            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+            if frame is not None:
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
+                detection_result = landmarker.detect(mp_image)
+
+                if detection_result.hand_landmarks and len(detection_result.hand_landmarks) > 0:
+                    hand = detection_result.hand_landmarks[0]
+                    return [[lm.x, lm.y, lm.z] for lm in hand]
+
+    except Exception as e:
+        print(f"Landmark extraction error: {e}")
+
+    return []

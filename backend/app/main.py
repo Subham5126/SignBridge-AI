@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 
 # Import routers
-from app.api.routes import nlp, stats, auth
+from app.api.routes import nlp, stats, auth, dataset
 from app.api.websockets import sign_recognition, speech
 
 app = FastAPI(
@@ -25,6 +25,7 @@ app.add_middleware(
 app.include_router(nlp.router, prefix=f"{settings.API_V1_STR}/nlp", tags=["NLP"])
 app.include_router(stats.router, prefix=f"{settings.API_V1_STR}/stats", tags=["Stats"])
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["Auth"])
+app.include_router(dataset.router, prefix=f"{settings.API_V1_STR}/dataset", tags=["Dataset"])
 
 # WebSocket Routers
 app.include_router(sign_recognition.router, tags=["WebSockets (Sign)"])

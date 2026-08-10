@@ -75,3 +75,5 @@ async def websocket_endpoint(websocket: WebSocket):
             processor_task,
             return_exceptions=True
         )
+        await asyncio.gather(receiver_task, processor_task, return_exceptions=True)
+

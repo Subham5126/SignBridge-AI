@@ -9,20 +9,22 @@ import {
 import { useAppStore } from '@/stores/useAppStore'
 import { isProfileComplete } from '@/lib/profileUtils'
 import { Button } from '@/components/ui'
-
-const NAV_ITEMS = [
-  { path: '/app', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/app/recognize', label: 'Sign Recognition', icon: Hand },
-  { path: '/app/text-to-sign', label: 'Text to Sign', icon: Type },
-  { path: '/app/speech', label: 'Speech Mode', icon: Mic },
-  { path: '/app/conversation', label: 'Conversation', icon: MessageSquare },
-  { path: '/app/learn', label: 'Learning Mode', icon: BookOpen },
-]
+import { useTranslation } from '@/lib/i18n'
 
 export function Sidebar({ collapsed, onToggle }) {
   const location = useLocation()
-  const { user, logout } = useAppStore()
+  const { user, language, logout } = useAppStore()
+  const { t } = useTranslation(language)
   const profileDone = isProfileComplete(user)
+
+  const navItems = [
+    { path: '/app', label: t('dashboard', 'Dashboard'), icon: LayoutDashboard },
+    { path: '/app/recognize', label: t('signRecognition', 'Sign Recognition'), icon: Hand },
+    { path: '/app/text-to-sign', label: t('textToSign', 'Text to Sign'), icon: Type },
+    { path: '/app/speech', label: t('speechMode', 'Speech Mode'), icon: Mic },
+    { path: '/app/conversation', label: t('conversation', 'Conversation'), icon: MessageSquare },
+    { path: '/app/learn', label: t('learningMode', 'Learning Mode'), icon: BookOpen },
+  ]
 
   return (
     <motion.aside
@@ -52,7 +54,7 @@ export function Sidebar({ collapsed, onToggle }) {
 
       {/* Nav items */}
       <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto overflow-x-hidden">
-        {NAV_ITEMS.map(({ path, label, icon: Icon }) => {
+        {navItems.map(({ path, label, icon: Icon }) => {
           const active = location.pathname === path
           const disabled = !profileDone
 
@@ -98,7 +100,7 @@ export function Sidebar({ collapsed, onToggle }) {
                 {active && !collapsed && (
                   <motion.div
                     layoutId="active-dot"
-                    className="ml-auto w-1.5 h-1.5 rounded-full bg-[var(--color-primary-400)]"
+                    className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary-400)] ml-auto shrink-0 shadow-[0_0_8px_#a78bfa]"
                   />
                 )}
               </motion.div>
@@ -107,45 +109,32 @@ export function Sidebar({ collapsed, onToggle }) {
         })}
       </nav>
 
-      {/* Bottom: profile + settings */}
-      <div className="px-2 py-4 border-t border-[var(--color-border)] space-y-0.5 shrink-0">
+      {/* Profile & Settings Link at Bottom */}
+      <div className="p-2 border-t border-[var(--color-border)] shrink-0">
         <Link to="/app/profile">
-          <div className="sidebar-item" title={collapsed ? 'Profile' : undefined}>
+          <div className={`sidebar-item ${location.pathname === '/app/profile' ? 'active' : ''}`}>
             <Settings size={18} className="shrink-0" />
             <AnimatePresence>
               {!collapsed && (
                 <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="whitespace-nowrap text-sm">
-                  Profile & Settings
+                  {t('profileSettings', 'Profile & Settings')}
                 </motion.span>
               )}
             </AnimatePresence>
           </div>
         </Link>
-        <div
-          onClick={logout}
-          className="sidebar-item hover:text-red-400 cursor-pointer"
-          title={collapsed ? 'Sign Out' : undefined}
-        >
-          <LogOut size={18} className="shrink-0" />
-          <AnimatePresence>
-            {!collapsed && (
-              <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="whitespace-nowrap text-sm">
-                Sign Out
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </div>
+      </div>
 
-        {/* Collapse button */}
+      {/* Collapse Toggle */}
+      <div className="p-2 border-t border-[var(--color-border)] flex items-center justify-end shrink-0">
         <button
           onClick={onToggle}
-          className="sidebar-item w-full mt-2"
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-surface-2)] transition-colors cursor-pointer w-full flex items-center justify-center gap-2 text-xs"
         >
-          {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           <AnimatePresence>
             {!collapsed && (
-              <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-xs whitespace-nowrap">
+              <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 Collapse
               </motion.span>
             )}
@@ -158,22 +147,23 @@ export function Sidebar({ collapsed, onToggle }) {
 
 export function TopBar({ sidebarCollapsed, isMobileView }) {
   const location = useLocation()
-  const { user, highContrast, largeText, toggleHighContrast, toggleLargeText, language, setLanguage, displayMode, toggleDisplayMode } = useAppStore()
+  const { user, theme, toggleTheme, highContrast, largeText, toggleHighContrast, toggleLargeText, language, setLanguage, displayMode, toggleDisplayMode } = useAppStore()
+  const { t } = useTranslation(language)
   const [showSearch, setShowSearch] = useState(false)
   const profileDone = isProfileComplete(user)
 
   const getPageTitle = () => {
     if (location.pathname === '/app/profile' && !profileDone) {
-      return 'Complete Your Profile'
+      return t('completeProfile', 'Complete Your Profile')
     }
     const map = {
-      '/app': 'Dashboard',
-      '/app/recognize': 'Live Sign Recognition',
-      '/app/text-to-sign': 'Text to Sign',
-      '/app/speech': 'Speech Mode',
-      '/app/conversation': 'Two-Way Conversation',
-      '/app/learn': 'Learning Mode',
-      '/app/profile': 'Profile & Settings',
+      '/app': t('dashboard', 'Dashboard'),
+      '/app/recognize': t('signRecognition', 'Live Sign Recognition'),
+      '/app/text-to-sign': t('textToSign', 'Text to Sign'),
+      '/app/speech': t('speechMode', 'Speech Mode'),
+      '/app/conversation': t('conversation', 'Two-Way Conversation'),
+      '/app/learn': t('learningMode', 'Learning Mode'),
+      '/app/profile': t('profileSettings', 'Profile & Settings'),
     }
     return map[location.pathname] || 'SignBridge AI'
   }
@@ -186,6 +176,25 @@ export function TopBar({ sidebarCollapsed, isMobileView }) {
       <h1 className="text-sm font-semibold text-[var(--color-text-primary)] truncate">{getPageTitle()}</h1>
 
       <div className="flex items-center gap-2 ml-auto">
+        {/* Compact Dark / Light Theme Toggle Button */}
+        <button
+          onClick={toggleTheme}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-primary)] hover:border-[var(--color-primary-500)]/50 transition-all cursor-pointer shadow-sm shrink-0"
+          title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+        >
+          {theme === 'dark' ? (
+            <>
+              <Moon size={14} className="text-purple-400" />
+              <span>Dark</span>
+            </>
+          ) : (
+            <>
+              <Sun size={14} className="text-amber-500" />
+              <span>Light</span>
+            </>
+          )}
+        </button>
+
         {/* Desktop ↔ Mobile Display Mode Toggle Button */}
         <button
           onClick={toggleDisplayMode}

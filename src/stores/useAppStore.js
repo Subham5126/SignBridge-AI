@@ -81,6 +81,7 @@ export const useAppStore = create(
 
       // Actions
       setTheme: (theme) => set({ theme }),
+      toggleTheme: () => set((s) => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })),
       toggleHighContrast: () => set((s) => ({ highContrast: !s.highContrast })),
       toggleLargeText: () => set((s) => ({ largeText: !s.largeText })),
       setLanguage: (language) => set({ language }),
@@ -215,8 +216,12 @@ export const useAppStore = create(
         } else if (sign === 'NOTHING' || sign === 'nothing') {
           // Ignore neutral/no-sign frames
           return {}
+        } else if (sign.length > 1) {
+          // Multi-character phrase (e.g., HELLO, THANK YOU) — append with clean space separation!
+          const trimmed = newText.trim()
+          newText = trimmed ? `${trimmed} ${sign}` : sign
         } else {
-          // Alphabet letter — concatenate directly (no space)
+          // Alphabet letter (A-Z) — concatenate directly (no space)
           newText = newText + sign
         }
 
