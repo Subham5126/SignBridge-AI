@@ -55,8 +55,9 @@ export function SpeechMode() {
   const [interim, setInterim] = useState('')
   const [supported, setSupported] = useState(true)
   const [error, setError] = useState('')
+  
   const isListeningRef = useRef(false)
-  const isExplicitStopRef = useRef(false)
+  const recognitionRef = useRef(null)
   const scrollRef = useRef(null)
 
   // Map global language ('en' | 'hi' | 'mr') to BCP-47 speech language code ('en-US' | 'hi-IN' | 'mr-IN')
@@ -76,64 +77,26 @@ export function SpeechMode() {
     }
   }, [])
 
-  const startListening = useCallback(() => {
+  const startListeningSession = useCallback(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!SR) {
       setSupported(false)
-      setError('Web Speech API is not supported in this browser. Please use Google Chrome or Microsoft Edge.')
+      setError('Web Speech API is not supported in this browser. Use Chrome or Edge.')
       return
     }
 
-    // Stop existing instance if running
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop() } catch (e) {}
-    }
-
-    isExplicitStopRef.current = false
-    isListeningRef.current = true
-    setError('')
+    if (!isListeningRef.current) return
 
     try {
       const recognition = new SR()
       recognition.lang = selectedLang
-      recognition.continuous = true
+      recognition.continuous = false
       recognition.interimResults = true
       recognition.maxAlternatives = 1
 
       recognition.onstart = () => {
         setListening(true)
-        isListeningRef.current = true
         setError('')
-      }
-
-      recognition.onend = () => {
-        if (!isExplicitStopRef.current && isListeningRef.current) {
-          // Restart if closed automatically by browser silence
-          try {
-            recognition.start()
-            return
-          } catch (e) {}
-        }
-        isListeningRef.current = false
-        setListening(false)
-        setInterim('')
-      }
-
-      recognition.onerror = (e) => {
-        console.warn('SpeechRecognition error:', e.error)
-        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-          setError('Microphone access denied. Please click the lock icon in your browser URL bar to allow microphone permissions.')
-          isListeningRef.current = false
-          setListening(false)
-        } else if (e.error === 'network') {
-          setError('Network error during speech recognition. Please check your internet connection.')
-          isListeningRef.current = false
-          setListening(false)
-        } else if (e.error === 'no-speech') {
-          // Ignore no-speech silence timeouts
-        } else {
-          setError(`Speech error: ${e.error}`)
-        }
       }
 
       recognition.onresult = (event) => {
@@ -160,33 +123,53 @@ export function SpeechMode() {
         setInterim(interimText)
       }
 
+      recognition.onerror = (e) => {
+        console.warn('Speech err:', e.error)
+        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+          setError('Microphone permission denied. Please allow microphone access in your browser.')
+          isListeningRef.current = false
+          setListening(false)
+        } else if (e.error !== 'no-speech') {
+          setError(`Speech error: ${e.error}`)
+        }
+      }
+
+      recognition.onend = () => {
+        setInterim('')
+        // Automatically restart next turn if session is still active
+        if (isListeningRef.current) {
+          try {
+            startListeningSession()
+          } catch (e) {
+            setListening(false)
+          }
+        } else {
+          setListening(false)
+        }
+      }
+
       recognition.start()
       recognitionRef.current = recognition
     } catch (err) {
-      console.error('Failed to start SpeechRecognition:', err)
-      setError('Could not access microphone. Please ensure microphone permissions are granted.')
+      console.error(err)
+      setError('Could not access microphone.')
       isListeningRef.current = false
       setListening(false)
     }
   }, [selectedLang])
 
-  const toggleListening = async () => {
-    if (listening) {
+  const toggleListening = () => {
+    if (isListeningRef.current) {
       stopListening()
     } else {
-      try {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          await navigator.mediaDevices.getUserMedia({ audio: true })
-        }
-      } catch (e) {
-        console.warn('getUserMedia mic request warning:', e)
-      }
-      startListening()
+      isListeningRef.current = true
+      setListening(true)
+      setError('')
+      startListeningSession()
     }
   }
 
   const stopListening = () => {
-    isExplicitStopRef.current = true
     isListeningRef.current = false
     if (recognitionRef.current) {
       try { recognitionRef.current.stop() } catch (e) {}
@@ -271,7 +254,7 @@ export function SpeechMode() {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             disabled={!supported}
-            className={`p-4 rounded-full transition-all ${
+            className={`p-4 rounded-full transition-all cursor-pointer ${
               listening
                 ? 'bg-red-500/20 border-2 border-red-500/50 text-red-400 shadow-[0_0_20px_rgba(239,68,68,0.2)]'
                 : 'bg-[var(--color-primary-600)]/20 border-2 border-[var(--color-primary-500)]/50 text-[var(--color-primary-400)] shadow-[0_0_20px_rgba(124,58,237,0.2)] hover:shadow-[0_0_30px_rgba(124,58,237,0.4)]'
@@ -330,7 +313,7 @@ export function SpeechMode() {
                       <button
                         onClick={() => speakText(entry.text)}
                         title="Re-play audio"
-                        className="text-[var(--color-text-muted)] hover:text-[var(--color-primary-400)] transition-colors p-1"
+                        className="text-[var(--color-text-muted)] hover:text-[var(--color-primary-400)] transition-colors p-1 cursor-pointer"
                       >
                         <Volume2 size={14} />
                       </button>
