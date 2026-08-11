@@ -103,6 +103,61 @@ export function TwoWayConversation() {
 
   const speechLangCode = language === 'hi' ? 'hi-IN' : language === 'mr' ? 'mr-IN' : 'en-US'
 
+  const drawLandmarkOverlay = (landmarks) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    const w = canvas.width = 640
+    const h = canvas.height = 480
+    ctx.clearRect(0, 0, w, h)
+
+    if (!landmarks || landmarks.length === 0) return
+
+    const connections = [
+      [0, 1], [1, 2], [2, 3], [3, 4], // Thumb
+      [0, 5], [5, 6], [6, 7], [7, 8], // Index
+      [5, 9], [9, 10], [10, 11], [11, 12], // Middle
+      [9, 13], [13, 14], [14, 15], [15, 16], // Ring
+      [13, 17], [17, 18], [18, 19], [19, 20], // Pinky
+      [0, 17] // Palm base
+    ]
+
+    ctx.strokeStyle = 'rgba(167,139,250,0.85)'
+    ctx.lineWidth = 3
+
+    connections.forEach(([i, j]) => {
+      if (!landmarks[i] || !landmarks[j]) return
+      ctx.beginPath()
+      ctx.moveTo((1 - landmarks[i].x) * w, landmarks[i].y * h)
+      ctx.lineTo((1 - landmarks[j].x) * w, landmarks[j].y * h)
+      ctx.stroke()
+    })
+
+    ctx.fillStyle = 'rgba(124,58,237,0.95)'
+    landmarks.forEach(lm => {
+      ctx.beginPath()
+      ctx.arc((1 - lm.x) * w, lm.y * h, 4, 0, Math.PI * 2)
+      ctx.fill()
+    })
+  }
+
+  // Auto scroll
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, signBuffer])
+
+  // Session timer
+  useEffect(() => {
+    if (sessionActive) {
+      timerRef.current = setInterval(() => setSessionTime(t => t + 1), 1000)
+    } else {
+      clearInterval(timerRef.current)
+    }
+    return () => clearInterval(timerRef.current)
+  }, [sessionActive])
+
+  const formatTime = (s) => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`
+
   const speakText = useCallback((text) => {
     if (!text || !('speechSynthesis' in window)) return
     window.speechSynthesis.cancel()
@@ -110,6 +165,145 @@ export function TwoWayConversation() {
     utterance.lang = speechLangCode
     window.speechSynthesis.speak(utterance)
   }, [speechLangCode])
+
+  // Webcam WebSocket AI Recognition for Deaf user
+  useEffect(() => {
+    if (!signActive) return
+
+    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/recognize'
+    const ws = new WebSocket(wsUrl)
+    wsRef.current = ws
+
+    let candidate = ''
+    let candidateStart = 0
+    let lastCommit = 0
+    const CONFIRM_MS = 400
+    const COOLDOWN_MS = 600
+
+    ws.onmessage = (event) => {
+      processingFrameRef.current = false
+      try {
+        const data = JSON.parse(event.data)
+        const now = Date.now()
+
+        if (data.landmarks) {
+          drawLandmarkOverlay(data.landmarks)
+        }
+
+        if (now - lastCommit < COOLDOWN_MS) return
+
+        if (data.sign && data.sign !== 'UNKNOWN' && data.confidence >= 60) {
+          if (data.sign === candidate) {
+            if (now - candidateStart >= CONFIRM_MS) {
+              // Commit sign
+              const signName = data.sign.toUpperCase()
+              lastCommit = now
+              candidate = ''
+              candidateStart = 0
+
+              setSignBuffer(prev => {
+                let next = prev
+                if (signName === 'SPACE') next = next.trimEnd() + ' '
+                else if (signName === 'DEL') next = next.slice(0, -1)
+                else if (signName !== 'NOTHING') next = next + signName
+                return next
+              })
+            }
+          } else {
+            candidate = data.sign
+            candidateStart = now
+          }
+        }
+      } catch (e) { console.error(e) }
+    }
+
+    const offscreen = document.createElement('canvas')
+    offscreen.width = 240; offscreen.height = 180
+    const offCtx = offscreen.getContext('2d', { willReadFrequently: true })
+    let count = 0
+
+    const sendLoop = () => {
+      count++
+      const webcam = webcamRef.current
+      if (webcam?.video && webcam.video.readyState === 4) {
+        if (count % 4 === 0 && wsRef.current?.readyState === WebSocket.OPEN && !processingFrameRef.current) {
+          if (wsRef.current.bufferedAmount === 0) {
+            processingFrameRef.current = true
+            offCtx.drawImage(webcam.video, 0, 0, 240, 180)
+            const frame = offscreen.toDataURL('image/jpeg', 0.35)
+            wsRef.current.send(frame)
+          }
+        }
+      }
+      animFrameRef.current = requestAnimationFrame(sendLoop)
+    }
+
+    animFrameRef.current = requestAnimationFrame(sendLoop)
+
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+    }
+  }, [signActive])
+
+  // Send Deaf user's signed text to conversation timeline
+  const sendSignMessage = async () => {
+    if (!signBuffer.trim()) return
+    const raw = signBuffer.trim()
+    let finalText = raw
+
+    // Improve with AI if connected
+    try {
+      setAiCorrecting(true)
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+      const res = await fetch(`${backendUrl}/api/v1/nlp/correct`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raw_text: raw })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.corrected_text && !data.corrected_text.startsWith('[')) {
+          finalText = data.corrected_text
+        }
+      }
+    } catch (e) { console.error(e) } finally { setAiCorrecting(false) }
+
+    setMessages(prev => [...prev, {
+      id: Date.now(),
+      sender: 'deaf',
+      rawSign: raw,
+      text: finalText,
+      confidence: 90,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      type: 'sign'
+    }])
+
+    speakText(finalText)
+    setSignBuffer('')
+    if (!sessionActive) setSessionActive(true)
+  }
+
+  // Hearing user send typed message
+  const sendHearingMsg = () => {
+    if (!hearingInput.trim()) return
+    const text = hearingInput.trim()
+
+    // Match keywords to sign dictionary
+    const words = text.toUpperCase().split(/\s+/)
+    const matchedSigns = ISL_SIGNS.filter(s => words.includes(s.word.toUpperCase()))
+
+    setMessages(prev => [...prev, {
+      id: Date.now(),
+      sender: 'hearing',
+      text,
+      signs: matchedSigns,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      type: 'typed'
+    }])
+    setHearingInput('')
+    if (!sessionActive) setSessionActive(true)
+  }
 
   // Hearing user speech mic
   const startHearingMic = () => {
