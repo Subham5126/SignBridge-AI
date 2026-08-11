@@ -41,7 +41,7 @@ export const translations = {
     speechSub: 'Voice to sign',
     speechDesc: 'Convert spoken voice directly to ASL sign visuals.',
 
-    // Recognition Page
+    // Recognition Page & Camera
     cameraReady: 'Camera Ready',
     startRecognition: 'Start Recognition',
     pause: 'Pause',
@@ -60,7 +60,26 @@ export const translations = {
     howItWorks: 'How it works',
     history: 'History',
 
-    // Speech & Text to Sign
+    // Speech Mode Page
+    liveSpeechTitle: 'Live Speech-to-Sign Captions',
+    listening: 'Listening... Speak now',
+    clickMicToStart: 'Click microphone button to start live speech translation.',
+    clearCaptions: 'Clear',
+    exportTxt: 'Export .txt',
+    replayAudio: 'Re-play audio',
+
+    // Two-Way Conversation
+    deafSigner: 'Deaf Signer',
+    hearingSpeaker: 'Hearing Speaker',
+    sharedChat: 'Shared Live Chat',
+    startCamera: 'Start Camera',
+    stopCamera: 'Stop Camera',
+    clickMicToSpeak: 'Click Mic to Speak',
+    typeMessagePlaceholder: 'Type message...',
+    send: 'Send',
+    signedLettersPlaceholder: 'Signed letters will appear here...',
+
+    // Text to Sign
     enterTextPlaceholder: 'Type text here to generate sign animations...',
     convert: 'Convert to Signs',
   },
@@ -103,7 +122,7 @@ export const translations = {
     speechSub: 'आवाज से संकेत',
     speechDesc: 'बोली गई आवाज को सीधे सांकेतिक भाषा के दृश्यों में बदलें।',
 
-    // Recognition Page
+    // Recognition Page & Camera
     cameraReady: 'कैमरा तैयार है',
     startRecognition: 'पहचान शुरू करें',
     pause: 'रोकें',
@@ -122,7 +141,26 @@ export const translations = {
     howItWorks: 'यह कैसे काम करता है',
     history: 'इतिहास',
 
-    // Speech & Text to Sign
+    // Speech Mode Page
+    liveSpeechTitle: 'लाइव आवाज से संकेत कैप्शन',
+    listening: 'सुन रहा है... अब बोलें',
+    clickMicToStart: 'लाइव भाषण अनुवाद शुरू करने के लिए माइक्रिफोन बटन दबाएं।',
+    clearCaptions: 'साफ़ करें',
+    exportTxt: 'एक्सपोर्ट .txt',
+    replayAudio: 'पुनः सुनें',
+
+    // Two-Way Conversation
+    deafSigner: 'सांकेतिक वक्ता (बाधित व्यक्ति)',
+    hearingSpeaker: 'श्रोता वक्ता (सुनने वाला)',
+    sharedChat: 'साझा लाइव चैट',
+    startCamera: 'कैमरा चालू करें',
+    stopCamera: 'कैमरा बंद करें',
+    clickMicToSpeak: 'बोलने के लिए माइक दबाएं',
+    typeMessagePlaceholder: 'संदेश टाइप करें...',
+    send: 'भेजें',
+    signedLettersPlaceholder: 'संकेत किए गए अक्षर यहां दिखाई देंगे...',
+
+    // Text to Sign
     enterTextPlaceholder: 'सांकेतिक एनिमेशन उत्पन्न करने के लिए यहां टेक्स्ट लिखें...',
     convert: 'संकेतों में बदलें',
   },
@@ -165,7 +203,7 @@ export const translations = {
     speechSub: 'आवाज ते चिन्ह',
     speechDesc: 'बोललेला आवाज थेट सांकेतिक भाषेच्या दृश्यांमध्ये बदला.',
 
-    // Recognition Page
+    // Recognition Page & Camera
     cameraReady: 'कॅमेरा तयार आहे',
     startRecognition: 'ओळख सुरू करा',
     pause: 'थांबवा',
@@ -184,7 +222,26 @@ export const translations = {
     howItWorks: 'हे कसे कार्य करते',
     history: 'इतिहास',
 
-    // Speech & Text to Sign
+    // Speech Mode Page
+    liveSpeechTitle: 'थेट आवाज ते चिन्ह कॅप्शन',
+    listening: 'ऐकत आहे... आता बोला',
+    clickMicToStart: 'थेट भाषण भाषांतर सुरू करण्यासाठी मायक्रोफोन बटण दाबा.',
+    clearCaptions: 'स्वच्छ करा',
+    exportTxt: 'एक्सपोर्ट .txt',
+    replayAudio: 'पुन्हा ऐका',
+
+    // Two-Way Conversation
+    deafSigner: 'सांकेतिक वक्ता (बाधित व्यक्ती)',
+    hearingSpeaker: 'श्रोता वक्ता (ऐकणारा)',
+    sharedChat: 'सामायिक थेट चॅट',
+    startCamera: 'कॅमेरा सुरू करा',
+    stopCamera: 'कॅमेरा बंद करा',
+    clickMicToSpeak: 'बोलण्यासाठी माइक दाबा',
+    typeMessagePlaceholder: 'मजकूर टाइप करा...',
+    send: 'पाठवा',
+    signedLettersPlaceholder: 'सांकेतिक अक्षरे येथे दिसतील...',
+
+    // Text to Sign
     enterTextPlaceholder: 'सांकेतिक ॲनिमेशन तयार करण्यासाठी येथे मजकूर टाइप करा...',
     convert: 'चिन्हांमध्ये बदला',
   }

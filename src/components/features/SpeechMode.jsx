@@ -3,11 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Mic, MicOff, Volume2, Copy, Trash2, Globe, AlertCircle, Download, BookOpen, Sparkles } from 'lucide-react'
 import { Button, Badge, GlowDot } from '@/components/ui'
 import { ISL_SIGNS } from '@/data/islSigns'
+import { useAppStore } from '@/stores/useAppStore'
+import { useTranslation } from '@/lib/i18n'
 
 const LANGUAGES = [
-  { code: 'en-US', label: 'English', flag: '🇺🇸' },
-  { code: 'hi-IN', label: 'हिन्दी', flag: '🇮🇳' },
-  { code: 'mr-IN', label: 'मराठी', flag: '🇮🇳' },
+  { code: 'en-US', langKey: 'en', label: 'English', flag: '🇺🇸' },
+  { code: 'hi-IN', langKey: 'hi', label: 'हिन्दी', flag: '🇮🇳' },
+  { code: 'mr-IN', langKey: 'mr', label: 'मराठी', flag: '🇮🇳' },
 ]
 
 // Audio waveform visualizer
@@ -45,73 +47,135 @@ function extractSignMatches(text) {
 }
 
 export function SpeechMode() {
+  const { language, setLanguage } = useAppStore()
+  const { t } = useTranslation(language)
+
   const [listening, setListening] = useState(false)
   const [transcript, setTranscript] = useState([])
   const [interim, setInterim] = useState('')
-  const [selectedLang, setSelectedLang] = useState('en-US')
   const [supported, setSupported] = useState(true)
   const [error, setError] = useState('')
   const recognitionRef = useRef(null)
+  const isExplicitStopRef = useRef(false)
   const scrollRef = useRef(null)
 
+  // Map global language ('en' | 'hi' | 'mr') to BCP-47 speech language code ('en-US' | 'hi-IN' | 'mr-IN')
+  const selectedLang = language === 'hi' ? 'hi-IN' : language === 'mr' ? 'mr-IN' : 'en-US'
+
+  const handleLanguageSelect = (code, langKey) => {
+    setLanguage(langKey)
+    if (listening) {
+      stopListening()
+    }
+  }
+
   useEffect(() => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SR) {
       setSupported(false)
     }
   }, [])
 
   const startListening = useCallback(() => {
-    if (!supported) return
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-    const recognition = new SR()
-    recognition.lang = selectedLang
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.maxAlternatives = 1
-
-    recognition.onstart = () => setListening(true)
-    recognition.onend = () => { setListening(false); setInterim('') }
-    recognition.onerror = (e) => {
-      setError(e.error === 'not-allowed' ? 'Microphone access denied' : `Error: ${e.error}`)
-      setListening(false)
+    if (!SR) {
+      setSupported(false)
+      setError('Web Speech API is not supported in this browser. Please use Google Chrome or Microsoft Edge.')
+      return
     }
 
-    recognition.onresult = (event) => {
-      let interimText = ''
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i]
-        if (result.isFinal) {
-          const finalStr = result[0].transcript.trim()
-          if (finalStr) {
-            setTranscript(prev => [...prev, {
-              id: Date.now(),
-              text: finalStr,
-              signs: extractSignMatches(finalStr),
-              confidence: Math.round((result[0].confidence || 0.9) * 100),
-              lang: selectedLang,
-              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-            }])
-          }
-          setInterim('')
+    // Stop existing instance if running
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch (e) {}
+    }
+
+    isExplicitStopRef.current = false
+    setError('')
+
+    try {
+      const recognition = new SR()
+      recognition.lang = selectedLang
+      recognition.continuous = true
+      recognition.interimResults = true
+      recognition.maxAlternatives = 1
+
+      recognition.onstart = () => {
+        setListening(true)
+        setError('')
+      }
+
+      recognition.onend = () => {
+        if (!isExplicitStopRef.current && listening) {
+          // Restart if closed automatically by browser silence
+          try {
+            recognition.start()
+            return
+          } catch (e) {}
+        }
+        setListening(false)
+        setInterim('')
+      }
+
+      recognition.onerror = (e) => {
+        console.warn('SpeechRecognition error:', e.error)
+        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+          setError('Microphone access denied. Please click the lock icon in your browser URL bar to allow microphone permissions.')
+          setListening(false)
+        } else if (e.error === 'network') {
+          setError('Network error during speech recognition. Please check your internet connection.')
+          setListening(false)
+        } else if (e.error === 'no-speech') {
+          // Ignore no-speech silence timeouts
         } else {
-          interimText += result[0].transcript
+          setError(`Speech error: ${e.error}`)
         }
       }
-      setInterim(interimText)
-    }
 
-    recognition.start()
-    recognitionRef.current = recognition
-  }, [supported, selectedLang])
+      recognition.onresult = (event) => {
+        let interimText = ''
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i]
+          if (result.isFinal) {
+            const finalStr = result[0].transcript.trim()
+            if (finalStr) {
+              setTranscript(prev => [...prev, {
+                id: Date.now(),
+                text: finalStr,
+                signs: extractSignMatches(finalStr),
+                confidence: Math.round((result[0].confidence || 0.9) * 100),
+                lang: selectedLang,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+              }])
+            }
+            setInterim('')
+          } else {
+            interimText += result[0].transcript
+          }
+        }
+        setInterim(interimText)
+      }
+
+      recognition.start()
+      recognitionRef.current = recognition
+    } catch (err) {
+      console.error('Failed to start SpeechRecognition:', err)
+      setError('Could not access microphone. Please ensure microphone permissions are granted.')
+      setListening(false)
+    }
+  }, [selectedLang, listening])
 
   const stopListening = () => {
-    recognitionRef.current?.stop()
+    isExplicitStopRef.current = true
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch (e) {}
+    }
     setListening(false)
   }
 
   const clearTranscript = () => { setTranscript([]); setInterim('') }
 
   const copyAll = () => {
+    if (transcript.length === 0) return
     navigator.clipboard.writeText(transcript.map(t => t.text).join('\n'))
   }
 
@@ -149,10 +213,10 @@ export function SpeechMode() {
             {LANGUAGES.map(lang => (
               <button
                 key={lang.code}
-                onClick={() => setSelectedLang(lang.code)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                onClick={() => handleLanguageSelect(lang.code, lang.langKey)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
                   selectedLang === lang.code
-                    ? 'bg-[var(--color-primary-600)]/20 text-[var(--color-primary-400)] border border-[var(--color-primary-500)]/30'
+                    ? 'bg-[var(--color-primary-600)]/20 text-[var(--color-primary-400)] border border-[var(--color-primary-500)]/30 shadow-sm'
                     : 'text-[var(--color-text-muted)] hover:bg-[var(--color-bg-surface-2)] border border-transparent'
                 }`}
               >
@@ -162,9 +226,9 @@ export function SpeechMode() {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="ghost" size="sm" icon={<Trash2 size={14} />} onClick={clearTranscript}>Clear</Button>
-            <Button variant="ghost" size="sm" icon={<Copy size={14} />} onClick={copyAll} disabled={transcript.length === 0}>Copy</Button>
-            <Button variant="ghost" size="sm" icon={<Download size={14} />} onClick={downloadTranscript} disabled={transcript.length === 0}>Export .txt</Button>
+            <Button variant="ghost" size="sm" icon={<Trash2 size={14} />} onClick={clearTranscript}>{t('clearCaptions', 'Clear')}</Button>
+            <Button variant="ghost" size="sm" icon={<Copy size={14} />} onClick={copyAll} disabled={transcript.length === 0}>{t('copyText', 'Copy')}</Button>
+            <Button variant="ghost" size="sm" icon={<Download size={14} />} onClick={downloadTranscript} disabled={transcript.length === 0}>{t('exportTxt', 'Export .txt')}</Button>
           </div>
         </div>
 

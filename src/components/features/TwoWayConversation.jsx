@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Hand, Mic, MicOff, Type, Send, Camera, X, Zap, Users, Clock, Volume2, Trash2, Download, Sparkles } from 'lucide-react'
+import { Hand, Mic, MicOff, Type, Send, Camera, X, Zap, Users, Clock, Volume2, Trash2, Download, Sparkles, AlertCircle } from 'lucide-react'
 import Webcam from 'react-webcam'
 import { Button, Badge, GlowDot, Card } from '@/components/ui'
 import { ISL_PHRASES, ISL_SIGNS } from '@/data/islSigns'
+import { useAppStore } from '@/stores/useAppStore'
+import { useTranslation } from '@/lib/i18n'
 
 function MessageBubble({ msg, onSpeak }) {
   const isDeaf = msg.sender === 'deaf'
@@ -64,6 +66,9 @@ function MessageBubble({ msg, onSpeak }) {
 }
 
 export function TwoWayConversation() {
+  const { language } = useAppStore()
+  const { t } = useTranslation(language)
+
   const [messages, setMessages] = useState([
     {
       id: 1, sender: 'deaf', text: 'HELLO WORLD',
@@ -85,6 +90,7 @@ export function TwoWayConversation() {
   const [sessionActive, setSessionActive] = useState(false)
   const [signBuffer, setSignBuffer] = useState('')
   const [aiCorrecting, setAiCorrecting] = useState(false)
+  const [micError, setMicError] = useState('')
 
   const messagesEndRef = useRef(null)
   const recognitionRef = useRef(null)
@@ -95,231 +101,62 @@ export function TwoWayConversation() {
   const animFrameRef = useRef(null)
   const processingFrameRef = useRef(false)
 
-  const drawLandmarkOverlay = (landmarks) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    const w = canvas.width = 640
-    const h = canvas.height = 480
-    ctx.clearRect(0, 0, w, h)
+  const speechLangCode = language === 'hi' ? 'hi-IN' : language === 'mr' ? 'mr-IN' : 'en-US'
 
-    if (!landmarks || landmarks.length === 0) return
-
-    const connections = [
-      [0, 1], [1, 2], [2, 3], [3, 4], // Thumb
-      [0, 5], [5, 6], [6, 7], [7, 8], // Index
-      [5, 9], [9, 10], [10, 11], [11, 12], // Middle
-      [9, 13], [13, 14], [14, 15], [15, 16], // Ring
-      [13, 17], [17, 18], [18, 19], [19, 20], // Pinky
-      [0, 17] // Palm base
-    ]
-
-    ctx.strokeStyle = 'rgba(167,139,250,0.85)'
-    ctx.lineWidth = 3
-
-    connections.forEach(([i, j]) => {
-      if (!landmarks[i] || !landmarks[j]) return
-      ctx.beginPath()
-      ctx.moveTo((1 - landmarks[i].x) * w, landmarks[i].y * h)
-      ctx.lineTo((1 - landmarks[j].x) * w, landmarks[j].y * h)
-      ctx.stroke()
-    })
-
-    ctx.fillStyle = 'rgba(124,58,237,0.95)'
-    landmarks.forEach(lm => {
-      ctx.beginPath()
-      ctx.arc((1 - lm.x) * w, lm.y * h, 4, 0, Math.PI * 2)
-      ctx.fill()
-    })
-  }
-
-  // Auto scroll
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, signBuffer])
-
-  // Session timer
-  useEffect(() => {
-    if (sessionActive) {
-      timerRef.current = setInterval(() => setSessionTime(t => t + 1), 1000)
-    } else {
-      clearInterval(timerRef.current)
-    }
-    return () => clearInterval(timerRef.current)
-  }, [sessionActive])
-
-  const formatTime = (s) => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`
-
-  const speakText = (text) => {
+  const speakText = useCallback((text) => {
     if (!text || !('speechSynthesis' in window)) return
     window.speechSynthesis.cancel()
     const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = speechLangCode
     window.speechSynthesis.speak(utterance)
-  }
-
-  // Webcam WebSocket AI Recognition for Deaf user
-  useEffect(() => {
-    if (!signActive) return
-
-    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/recognize'
-    const ws = new WebSocket(wsUrl)
-    wsRef.current = ws
-
-    let candidate = ''
-    let candidateStart = 0
-    let lastCommit = 0
-    const CONFIRM_MS = 400
-    const COOLDOWN_MS = 600
-
-    ws.onmessage = (event) => {
-      processingFrameRef.current = false
-      try {
-        const data = JSON.parse(event.data)
-        const now = Date.now()
-
-        if (data.landmarks) {
-          drawLandmarkOverlay(data.landmarks)
-        }
-
-        if (now - lastCommit < COOLDOWN_MS) return
-
-        if (data.sign && data.sign !== 'UNKNOWN' && data.confidence >= 60) {
-          if (data.sign === candidate) {
-            if (now - candidateStart >= CONFIRM_MS) {
-              // Commit sign
-              const signName = data.sign.toUpperCase()
-              lastCommit = now
-              candidate = ''
-              candidateStart = 0
-
-              setSignBuffer(prev => {
-                let next = prev
-                if (signName === 'SPACE') next = next.trimEnd() + ' '
-                else if (signName === 'DEL') next = next.slice(0, -1)
-                else if (signName !== 'NOTHING') next = next + signName
-                return next
-              })
-            }
-          } else {
-            candidate = data.sign
-            candidateStart = now
-          }
-        }
-      } catch (e) { console.error(e) }
-    }
-
-    const offscreen = document.createElement('canvas')
-    offscreen.width = 240; offscreen.height = 180
-    const offCtx = offscreen.getContext('2d', { willReadFrequently: true })
-    let count = 0
-
-    const sendLoop = () => {
-      count++
-      const webcam = webcamRef.current
-      if (webcam?.video && webcam.video.readyState === 4) {
-        if (count % 4 === 0 && wsRef.current?.readyState === WebSocket.OPEN && !processingFrameRef.current) {
-          if (wsRef.current.bufferedAmount === 0) {
-            processingFrameRef.current = true
-            offCtx.drawImage(webcam.video, 0, 0, 240, 180)
-            const frame = offscreen.toDataURL('image/jpeg', 0.35)
-            wsRef.current.send(frame)
-          }
-        }
-      }
-      animFrameRef.current = requestAnimationFrame(sendLoop)
-    }
-
-    animFrameRef.current = requestAnimationFrame(sendLoop)
-
-    return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
-      if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
-    }
-  }, [signActive])
-
-  // Send Deaf user's signed text to conversation timeline
-  const sendSignMessage = async () => {
-    if (!signBuffer.trim()) return
-    const raw = signBuffer.trim()
-    let finalText = raw
-
-    // Improve with AI if connected
-    try {
-      setAiCorrecting(true)
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
-      const res = await fetch(`${backendUrl}/api/v1/nlp/correct`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw_text: raw })
-      })
-      if (res.ok) {
-        const data = await res.json()
-        if (data.corrected_text && !data.corrected_text.startsWith('[')) {
-          finalText = data.corrected_text
-        }
-      }
-    } catch (e) { console.error(e) } finally { setAiCorrecting(false) }
-
-    setMessages(prev => [...prev, {
-      id: Date.now(),
-      sender: 'deaf',
-      rawSign: raw,
-      text: finalText,
-      confidence: 90,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      type: 'sign'
-    }])
-
-    speakText(finalText)
-    setSignBuffer('')
-    if (!sessionActive) setSessionActive(true)
-  }
-
-  // Hearing user send typed message
-  const sendHearingMsg = () => {
-    if (!hearingInput.trim()) return
-    const text = hearingInput.trim()
-
-    // Match keywords to sign dictionary
-    const words = text.toUpperCase().split(/\s+/)
-    const matchedSigns = ISL_SIGNS.filter(s => words.includes(s.word.toUpperCase()))
-
-    setMessages(prev => [...prev, {
-      id: Date.now(),
-      sender: 'hearing',
-      text,
-      signs: matchedSigns,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      type: 'typed'
-    }])
-    setHearingInput('')
-    if (!sessionActive) setSessionActive(true)
-  }
+  }, [speechLangCode])
 
   // Hearing user speech mic
   const startHearingMic = () => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) return
+    setMicError('')
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-    const r = new SR()
-    r.lang = 'en-US'; r.continuous = false; r.interimResults = false
-    r.onresult = (e) => {
-      const text = e.results[0][0].transcript
-      const words = text.toUpperCase().split(/\s+/)
-      const matchedSigns = ISL_SIGNS.filter(s => words.includes(s.word.toUpperCase()))
+    if (!SR) {
+      setMicError('Speech recognition is not supported in this browser. Use Chrome or Edge.')
+      return
+    }
 
-      setMessages(prev => [...prev, {
-        id: Date.now(), sender: 'hearing', text, signs: matchedSigns,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        type: 'speech'
-      }])
+    try {
+      const r = new SR()
+      r.lang = speechLangCode
+      r.continuous = false
+      r.interimResults = false
+
+      r.onstart = () => setHearingMicActive(true)
+
+      r.onresult = (e) => {
+        const text = e.results[0][0].transcript
+        const words = text.toUpperCase().split(/\s+/)
+        const matchedSigns = ISL_SIGNS.filter(s => words.includes(s.word.toUpperCase()))
+
+        setMessages(prev => [...prev, {
+          id: Date.now(), sender: 'hearing', text, signs: matchedSigns,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          type: 'speech'
+        }])
+        setHearingMicActive(false)
+      }
+
+      r.onerror = (e) => {
+        console.warn('Speech err:', e.error)
+        setMicError(e.error === 'not-allowed' ? 'Microphone permission denied.' : `Speech error: ${e.error}`)
+        setHearingMicActive(false)
+      }
+
+      r.onend = () => setHearingMicActive(false)
+
+      r.start()
+      recognitionRef.current = r
+      if (!sessionActive) setSessionActive(true)
+    } catch (err) {
+      console.error(err)
+      setMicError('Could not start microphone.')
       setHearingMicActive(false)
     }
-    r.onerror = () => setHearingMicActive(false)
-    r.onend = () => setHearingMicActive(false)
-    r.start()
-    recognitionRef.current = r
-    setHearingMicActive(true)
-    if (!sessionActive) setSessionActive(true)
   }
 
   const exportChat = () => {
@@ -337,7 +174,7 @@ export function TwoWayConversation() {
       <div className="card p-4 flex flex-col gap-3">
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 rounded-full bg-[var(--color-primary-500)]" />
-          <span className="text-sm font-bold text-[var(--color-text-primary)]">Deaf Signer</span>
+          <span className="text-sm font-bold text-[var(--color-text-primary)]">{t('deafSigner', 'Deaf Signer')}</span>
           <Badge variant="primary" className="ml-auto">Camera + AI</Badge>
         </div>
 
@@ -366,7 +203,7 @@ export function TwoWayConversation() {
 
         {/* Buffer box */}
         <div className="p-3 rounded-xl bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] min-h-[50px] flex items-center justify-between">
-          <span className="text-xs font-mono text-[var(--color-text-primary)] break-all">{signBuffer || <span className="text-[var(--color-text-muted)] italic">Signed letters will appear here...</span>}</span>
+          <span className="text-xs font-mono text-[var(--color-text-primary)] break-all">{signBuffer || <span className="text-[var(--color-text-muted)] italic">{t('signedLettersPlaceholder', 'Signed letters will appear here...')}</span>}</span>
           {signBuffer && (
             <button onClick={() => setSignBuffer('')} className="text-[var(--color-text-muted)] hover:text-red-400 p-1">
               <X size={14} />
@@ -382,7 +219,7 @@ export function TwoWayConversation() {
             icon={signActive ? <X size={14} /> : <Camera size={14} />}
             onClick={() => setSignActive(s => !s)}
           >
-            {signActive ? 'Stop Camera' : 'Start Signing'}
+            {signActive ? t('stopCamera', 'Stop Camera') : t('startCamera', 'Start Camera')}
           </Button>
 
           <Button
@@ -393,7 +230,7 @@ export function TwoWayConversation() {
             disabled={!signBuffer.trim()}
             loading={aiCorrecting}
           >
-            Send
+            {t('send', 'Send')}
           </Button>
         </div>
       </div>
@@ -403,7 +240,7 @@ export function TwoWayConversation() {
         <div className="flex items-center justify-between mb-3 border-b border-[var(--color-border)]/50 pb-2">
           <div className="flex items-center gap-2">
             <Users size={16} className="text-[var(--color-accent-500)]" />
-            <span className="text-sm font-bold text-[var(--color-text-primary)]">Shared Live Chat</span>
+            <span className="text-sm font-bold text-[var(--color-text-primary)]">{t('sharedChat', 'Shared Live Chat')}</span>
           </div>
           <div className="flex items-center gap-2">
             {sessionActive && (
@@ -438,7 +275,7 @@ export function TwoWayConversation() {
       <div className="card p-4 flex flex-col gap-3">
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 rounded-full bg-[var(--color-accent-500)]" />
-          <span className="text-sm font-bold text-[var(--color-text-primary)]">Hearing Speaker</span>
+          <span className="text-sm font-bold text-[var(--color-text-primary)]">{t('hearingSpeaker', 'Hearing Speaker')}</span>
           <Badge variant="accent" className="ml-auto">Voice / Text</Badge>
         </div>
 
@@ -448,7 +285,7 @@ export function TwoWayConversation() {
             onClick={hearingMicActive ? () => { recognitionRef.current?.stop(); setHearingMicActive(false) } : startHearingMic}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className={`p-5 rounded-full border-2 transition-all ${
+            className={`p-5 rounded-full border-2 transition-all cursor-pointer ${
               hearingMicActive
                 ? 'bg-red-500/20 border-red-500/50 text-red-400 shadow-[0_0_24px_rgba(239,68,68,0.3)]'
                 : 'bg-[var(--color-accent-500)]/10 border-[var(--color-accent-500)]/30 text-[var(--color-accent-400)] hover:shadow-[0_0_24px_rgba(6,182,212,0.3)]'
@@ -462,8 +299,15 @@ export function TwoWayConversation() {
             </motion.div>
           </motion.button>
           <p className="text-xs text-[var(--color-text-muted)] mt-3">
-            {hearingMicActive ? 'Listening... Speak now' : 'Click Mic to Speak'}
+            {hearingMicActive ? t('listening', 'Listening... Speak now') : t('clickMicToSpeak', 'Click Mic to Speak')}
           </p>
+
+          {micError && (
+            <div className="mt-2 text-center text-xs text-red-400 flex items-center justify-center gap-1">
+              <AlertCircle size={12} />
+              <span>{micError}</span>
+            </div>
+          )}
         </div>
 
         {/* Text input */}
@@ -474,12 +318,12 @@ export function TwoWayConversation() {
               value={hearingInput}
               onChange={e => setHearingInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && sendHearingMsg()}
-              placeholder="Type message..."
+              placeholder={t('typeMessagePlaceholder', 'Type message...')}
               className="flex-1 bg-[var(--color-bg-surface-2)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent-500)]/50"
               aria-label="Type message"
             />
             <Button variant="accent" size="sm" icon={<Send size={14} />} onClick={sendHearingMsg} disabled={!hearingInput.trim()}>
-              Send
+              {t('send', 'Send')}
             </Button>
           </div>
         </div>
