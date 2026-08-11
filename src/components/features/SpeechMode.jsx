@@ -55,7 +55,7 @@ export function SpeechMode() {
   const [interim, setInterim] = useState('')
   const [supported, setSupported] = useState(true)
   const [error, setError] = useState('')
-  const recognitionRef = useRef(null)
+  const isListeningRef = useRef(false)
   const isExplicitStopRef = useRef(false)
   const scrollRef = useRef(null)
 
@@ -64,7 +64,7 @@ export function SpeechMode() {
 
   const handleLanguageSelect = (code, langKey) => {
     setLanguage(langKey)
-    if (listening) {
+    if (isListeningRef.current) {
       stopListening()
     }
   }
@@ -90,6 +90,7 @@ export function SpeechMode() {
     }
 
     isExplicitStopRef.current = false
+    isListeningRef.current = true
     setError('')
 
     try {
@@ -101,17 +102,19 @@ export function SpeechMode() {
 
       recognition.onstart = () => {
         setListening(true)
+        isListeningRef.current = true
         setError('')
       }
 
       recognition.onend = () => {
-        if (!isExplicitStopRef.current && listening) {
+        if (!isExplicitStopRef.current && isListeningRef.current) {
           // Restart if closed automatically by browser silence
           try {
             recognition.start()
             return
           } catch (e) {}
         }
+        isListeningRef.current = false
         setListening(false)
         setInterim('')
       }
@@ -120,9 +123,11 @@ export function SpeechMode() {
         console.warn('SpeechRecognition error:', e.error)
         if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
           setError('Microphone access denied. Please click the lock icon in your browser URL bar to allow microphone permissions.')
+          isListeningRef.current = false
           setListening(false)
         } else if (e.error === 'network') {
           setError('Network error during speech recognition. Please check your internet connection.')
+          isListeningRef.current = false
           setListening(false)
         } else if (e.error === 'no-speech') {
           // Ignore no-speech silence timeouts
@@ -160,16 +165,34 @@ export function SpeechMode() {
     } catch (err) {
       console.error('Failed to start SpeechRecognition:', err)
       setError('Could not access microphone. Please ensure microphone permissions are granted.')
+      isListeningRef.current = false
       setListening(false)
     }
-  }, [selectedLang, listening])
+  }, [selectedLang])
+
+  const toggleListening = async () => {
+    if (listening) {
+      stopListening()
+    } else {
+      try {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          await navigator.mediaDevices.getUserMedia({ audio: true })
+        }
+      } catch (e) {
+        console.warn('getUserMedia mic request warning:', e)
+      }
+      startListening()
+    }
+  }
 
   const stopListening = () => {
     isExplicitStopRef.current = true
+    isListeningRef.current = false
     if (recognitionRef.current) {
       try { recognitionRef.current.stop() } catch (e) {}
     }
     setListening(false)
+    setInterim('')
   }
 
   const clearTranscript = () => { setTranscript([]); setInterim('') }
@@ -244,7 +267,7 @@ export function SpeechMode() {
           </div>
 
           <motion.button
-            onClick={listening ? stopListening : startListening}
+            onClick={toggleListening}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             disabled={!supported}
